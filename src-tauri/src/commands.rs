@@ -4,10 +4,13 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::gateway::{SessionKind, SessionRegistry, SessionSpec};
+use crate::model::{Document, Node};
+use crate::vault::{VaultError, VaultManager};
 
 pub struct AppState {
     pub registry: Arc<SessionRegistry>,
     pub gateway_port: u16,
+    pub vault: VaultManager,
 }
 
 #[derive(Serialize)]
@@ -36,6 +39,35 @@ pub fn open_session(state: State<AppState>, target: String, kind: String) -> Ses
         ws_url: build_ws_url(state.gateway_port, &spec),
         kind,
     }
+}
+
+#[tauri::command]
+pub fn unlock_vault(state: State<AppState>, password: String) -> Result<(), VaultError> {
+    state.vault.unlock(&password)
+}
+
+#[tauri::command]
+pub fn lock_vault(state: State<AppState>) {
+    state.vault.lock();
+}
+
+#[tauri::command]
+pub fn list_tree(state: State<AppState>) -> Result<Document, VaultError> {
+    state.vault.tree()
+}
+
+#[tauri::command]
+pub fn save_connection(
+    state: State<AppState>,
+    parent_id: Option<String>,
+    node: Node,
+) -> Result<(), VaultError> {
+    state.vault.upsert(parent_id.as_deref(), node)
+}
+
+#[tauri::command]
+pub fn delete_node(state: State<AppState>, id: String) -> Result<(), VaultError> {
+    state.vault.delete(&id)
 }
 
 #[cfg(test)]
