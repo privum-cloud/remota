@@ -27,6 +27,11 @@ axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
 uuid = { version = "1", features = ["v4"] }
+argon2 = "0.5"
+aes-gcm = "0.10"
+getrandom = "0.2"
+zeroize = "1"
+dirs = "5"
 
 [dev-dependencies]
 tokio-tungstenite = "0.24"

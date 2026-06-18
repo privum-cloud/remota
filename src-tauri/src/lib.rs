@@ -1,5 +1,6 @@
 mod commands;
 mod gateway;
+mod vault;
 
 use std::sync::Arc;
 
