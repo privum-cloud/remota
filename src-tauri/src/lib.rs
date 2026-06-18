@@ -35,6 +35,7 @@ pub fn run() {
             commands::open_session,
             commands::unlock_vault,
             commands::lock_vault,
+            commands::vault_exists,
             commands::list_tree,
             commands::save_connection,
             commands::delete_node

@@ -28,6 +28,12 @@ impl VaultManager {
         self.inner.lock().unwrap().is_some()
     }
 
+    /// `true` se já existe um cofre em disco. Permite ao UI distinguir
+    /// "definir senha mestra" (primeiro uso) de "destravar" (cofre existente).
+    pub fn vault_exists(&self) -> bool {
+        self.path.exists()
+    }
+
     pub fn unlock(&self, password: &str) -> Result<(), VaultError> {
         let doc = if self.path.exists() {
             let bytes = load_document(&self.path, password)?;
@@ -181,5 +187,13 @@ mod tests {
     fn tree_when_locked_errs() {
         let mgr = VaultManager::new(tmp("locked"));
         assert!(matches!(mgr.tree(), Err(VaultError::Locked)));
+    }
+
+    #[test]
+    fn vault_exists_reflects_file_presence() {
+        let mgr = VaultManager::new(tmp("exists"));
+        assert!(!mgr.vault_exists(), "sem ficheiro ainda");
+        mgr.unlock("m").unwrap();
+        assert!(mgr.vault_exists(), "unlock no primeiro uso cria o ficheiro");
     }
 }

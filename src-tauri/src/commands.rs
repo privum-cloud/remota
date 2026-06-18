@@ -52,6 +52,11 @@ pub fn lock_vault(state: State<AppState>) {
 }
 
 #[tauri::command]
+pub fn vault_exists(state: State<AppState>) -> bool {
+    state.vault.vault_exists()
+}
+
+#[tauri::command]
 pub fn list_tree(state: State<AppState>) -> Result<Document, VaultError> {
     state.vault.tree()
 }
