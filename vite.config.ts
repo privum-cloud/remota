@@ -14,7 +14,8 @@ export default defineConfig(async () => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
-    port: 1420,
+    // 1430 em vez do default 1420 do Tauri: o VS Code faz auto-forward do 1420 e colide.
+    port: 1430,
     strictPort: true,
     host: host || false,
     hmr: host
