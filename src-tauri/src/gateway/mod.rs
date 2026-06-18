@@ -1,4 +1,4 @@
 pub mod registry;
 pub mod server;
 pub use registry::{SessionKind, SessionRegistry, SessionSpec};
-pub use server::{router, start};
+pub use server::start;
