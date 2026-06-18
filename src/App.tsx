@@ -1,51 +1,52 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { VncView } from "./renderers/VncView";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type SessionInfo = { wsUrl: string; kind: string };
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+export default function App() {
+  // Host real do homelab para validação E2E (ex.: x11vnc do groot).
+  const [host, setHost] = useState("192.168.1.242:5900");
+  const [password, setPassword] = useState("");
+  const [session, setSession] = useState<SessionInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function openVnc() {
+    setError(null);
+    try {
+      const info = await invoke<SessionInfo>("open_session", {
+        target: host,
+        kind: "vnc",
+      });
+      setSession(info);
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
+    <main style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: 8, display: "flex", gap: 8, alignItems: "center" }}>
         <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+          value={host}
+          onChange={(e) => setHost(e.target.value)}
+          placeholder="host:porta"
+          style={{ flex: 1 }}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+        <input
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="senha VNC (opcional)"
+          type="password"
+        />
+        <button onClick={openVnc}>Abrir VNC</button>
+      </div>
+      {error && (
+        <div style={{ padding: 8, color: "#c00", fontFamily: "monospace" }}>{error}</div>
+      )}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {session && <VncView wsUrl={session.wsUrl} password={password || undefined} />}
+      </div>
     </main>
   );
 }
-
-export default App;
