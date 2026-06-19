@@ -179,7 +179,7 @@ function TreeNode({
             >
               {hasChildren ? (isCollapsed ? "▸" : "▾") : ""}
             </span>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📁 {node.name}</span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.icon ?? "📁"} {node.name}</span>
           </span>
           <DeleteBtn onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} />
         </div>

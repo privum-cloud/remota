@@ -3,6 +3,8 @@ import type { Node } from "../lib/vaultApi";
 import { colors, input, label, primaryBtn } from "./styles";
 import { GatewaySection, type GwForm, emptyGw, gwFromModel, gwToModel } from "./GatewaySection";
 
+const ICONS = ["📁", "📂", "🗂️", "🗄️", "🔒", "🖥️", "🌐", "☁️", "⚙️", "🛠️", "🏠", "🐧", "🪟", "🚀", "🔑", "🐳", "📦", "🛡️"];
+
 export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: Node) => Promise<void> }) {
   const editingId = node?.type === "folder" ? node.id : null;
   const existingChildren = node?.type === "folder" ? node.children : [];
@@ -11,6 +13,7 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
   const [password, setPassword] = useState("");
   const [domain, setDomain] = useState("");
   const [gw, setGw] = useState<GwForm>(emptyGw);
+  const [icon, setIcon] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -21,6 +24,7 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
     setPassword(f?.defaults.password ?? "");
     setDomain(f?.defaults.domain ?? "");
     setGw(gwFromModel(f?.gateway));
+    setIcon(f?.icon ?? "");
     setSaved(false);
   }, [node]);
 
@@ -39,6 +43,7 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
           domain: domain || undefined,
         },
         gateway: gwToModel(gw),
+        icon: icon || undefined,
         children: existingChildren, // preserva a subárvore ao editar
       };
       await onSave(built);
@@ -53,6 +58,28 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
       <h2 style={{ margin: 0, fontSize: 15, color: colors.text }}>{editingId ? "Edit folder" : "New folder"}</h2>
       <Field label="Name">
         <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Production" />
+      </Field>
+      <Field label="Icon">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {ICONS.map((ic) => (
+            <button
+              key={ic}
+              type="button"
+              onClick={() => setIcon(ic === icon ? "" : ic)}
+              style={{
+                fontSize: 18,
+                lineHeight: 1,
+                padding: "4px 7px",
+                borderRadius: 6,
+                cursor: "pointer",
+                background: icon === ic ? "#243447" : "transparent",
+                border: `1px solid ${icon === ic ? colors.accent : colors.border}`,
+              }}
+            >
+              {ic}
+            </button>
+          ))}
+        </div>
       </Field>
       <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 12 }}>
         <div style={{ ...label, marginBottom: 8 }}>Defaults inherited by children</div>

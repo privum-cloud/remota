@@ -55,6 +55,8 @@ pub enum Node {
         defaults: Credentials,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         gateway: Option<Gateway>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        icon: Option<String>,
         #[serde(default)]
         children: Vec<Node>,
     },
@@ -141,6 +143,7 @@ mod tests {
                 name: "Prod".into(),
                 defaults: Credentials { username: Some("root".into()), ..Default::default() },
                 gateway: None,
+                icon: None,
                 children: vec![Node::Connection {
                     id: "c1".into(),
                     name: "web".into(),
@@ -161,6 +164,7 @@ mod tests {
                 name: "Prod".into(),
                 defaults: Credentials::default(),
                 gateway: None,
+                icon: None,
                 children: vec![Node::Connection {
                     id: "c1".into(),
                     name: "web".into(),
@@ -180,6 +184,7 @@ mod tests {
                 name: "Prod".into(),
                 defaults: Credentials::default(),
                 gateway: None,
+                icon: None,
                 children: vec![Node::Connection {
                     id: "c1".into(),
                     name: "web".into(),

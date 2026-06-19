@@ -32,6 +32,7 @@ fn parse_children(parent: roxmltree::Node) -> Vec<Node> {
                 name,
                 defaults: Credentials::default(),
                 gateway: None,
+                icon: None,
                 children: parse_children(el),
             });
         } else {

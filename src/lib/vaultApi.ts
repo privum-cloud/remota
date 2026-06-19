@@ -33,6 +33,7 @@ export type Node =
       name: string;
       defaults: Credentials;
       gateway?: Gateway;
+      icon?: string;
       children: Node[];
     }
   | { type: "connection"; id: string; name: string; conn: Connection };
