@@ -12,7 +12,7 @@ import { findConnWithChain, findNode, findParentId, nodeExists } from "./lib/tre
 import { resolveCreds, resolveGateway } from "./lib/inherit";
 import type { Node } from "./lib/vaultApi";
 import { vaultApi } from "./lib/vaultApi";
-import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { colors } from "./components/styles";
 
 type Editing = { kind: "connection" | "folder"; node: Node | null; parentId: string | null };
@@ -91,6 +91,29 @@ export default function App() {
     }
   }
 
+  async function exportConnections() {
+    const path = await save({ defaultPath: "remota-conexoes.json", filters: [{ name: "JSON", extensions: ["json"] }] });
+    if (typeof path !== "string") return;
+    try {
+      const r = await vaultApi.exportConnections(path);
+      setNotice(r.message);
+    } catch (e) {
+      setNotice("Falha no export: " + String(e));
+    }
+  }
+
+  async function importRemotaJson() {
+    const path = await open({ multiple: false, filters: [{ name: "JSON Remota", extensions: ["json"] }] });
+    if (typeof path !== "string") return;
+    try {
+      const r = await vaultApi.importRemotaJson(path);
+      await v.refresh();
+      setNotice(r.message);
+    } catch (e) {
+      setNotice("Falha no import: " + String(e));
+    }
+  }
+
   async function deleteNode(id: string) {
     const node = findNode(v.tree, id);
     const name = node?.name ?? "este item";
@@ -112,7 +135,8 @@ export default function App() {
         { label: "Nova pasta", onClick: newFolder },
         "sep",
         { label: "Importar do mRemoteNG (confCons.xml)…", onClick: importMremoteng },
-        { label: "Exportar conexões…", onClick: () => setNotice("Export (cópia do cofre cifrado connections.dat, ou JSON) chega a seguir.") },
+        { label: "Importar conexões (Remota JSON)…", onClick: importRemotaJson },
+        { label: "Exportar conexões (JSON)…", onClick: exportConnections },
         "sep",
         { label: "Bloquear cofre", onClick: lock },
       ],

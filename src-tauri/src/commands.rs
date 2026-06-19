@@ -106,6 +106,32 @@ pub fn import_mremoteng(state: State<AppState>, path: String) -> Result<ImportRe
     })
 }
 
+/// Exporta a árvore de conexões para um JSON em claro (backup/portabilidade).
+/// AVISO: contém as passwords em claro — é uma exportação explícita.
+#[tauri::command]
+pub fn export_connections(state: State<AppState>, path: String) -> Result<ImportReport, VaultError> {
+    let doc = state.vault.tree()?;
+    let json = serde_json::to_vec_pretty(&doc).map_err(|e| VaultError::Io(e.to_string()))?;
+    std::fs::write(&path, &json).map_err(|e| VaultError::Io(e.to_string()))?;
+    let connections = crate::importer::count_connections(&doc.nodes);
+    Ok(ImportReport {
+        connections,
+        message: format!("{connections} conexões exportadas para {path} (JSON em claro)."),
+    })
+}
+
+/// Reimporta um JSON exportado pelo Remota (merge na raiz).
+#[tauri::command]
+pub fn import_remota_json(state: State<AppState>, path: String) -> Result<ImportReport, VaultError> {
+    let bytes = std::fs::read(&path).map_err(|e| VaultError::Io(e.to_string()))?;
+    let doc: Document = serde_json::from_slice(&bytes).map_err(|_| VaultError::BadFormat)?;
+    let connections = state.vault.import(doc.nodes)?;
+    Ok(ImportReport {
+        connections,
+        message: format!("{connections} conexões importadas do JSON Remota."),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

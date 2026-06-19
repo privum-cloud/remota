@@ -52,4 +52,8 @@ export const vaultApi = {
   deleteNode: (id: string) => invoke<void>("delete_node", { id }),
   importMremoteng: (path: string) =>
     invoke<{ connections: number; message: string }>("import_mremoteng", { path }),
+  exportConnections: (path: string) =>
+    invoke<{ connections: number; message: string }>("export_connections", { path }),
+  importRemotaJson: (path: string) =>
+    invoke<{ connections: number; message: string }>("import_remota_json", { path }),
 };

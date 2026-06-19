@@ -41,7 +41,9 @@ pub fn run() {
             commands::list_tree,
             commands::save_connection,
             commands::delete_node,
-            commands::import_mremoteng
+            commands::import_mremoteng,
+            commands::export_connections,
+            commands::import_remota_json
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
