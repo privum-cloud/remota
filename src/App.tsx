@@ -33,14 +33,16 @@ export default function App() {
     setEditing({ kind: n.type === "folder" ? "folder" : "connection", node: n, parentId: findParentId(v.tree, n.id) });
     setActive("editor");
   }
-  function newConnection() {
-    setEditing({ kind: "connection", node: null, parentId: targetParent });
+  function newConnectionAt(parentId: string | null) {
+    setEditing({ kind: "connection", node: null, parentId });
     setActive("editor");
   }
-  function newFolder() {
-    setEditing({ kind: "folder", node: null, parentId: targetParent });
+  function newFolderAt(parentId: string | null) {
+    setEditing({ kind: "folder", node: null, parentId });
     setActive("editor");
   }
+  const newConnection = () => newConnectionAt(targetParent);
+  const newFolder = () => newFolderAt(targetParent);
   function lock() {
     v.lock();
     setEditing({ kind: "connection", node: null, parentId: null });
@@ -122,6 +124,8 @@ export default function App() {
             onSelect={selectNode}
             onOpen={(n) => { if (n.type === "connection") openConn(n.id); }}
             onDelete={(id) => { v.remove(id); if (selected?.id === id) setEditing({ kind: "connection", node: null, parentId: null }); }}
+            onNewConnection={newConnectionAt}
+            onNewFolder={newFolderAt}
           />
         </aside>
 

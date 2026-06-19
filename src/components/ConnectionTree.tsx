@@ -1,5 +1,6 @@
-import type { MouseEvent } from "react";
+import { type MouseEvent, useState } from "react";
 import type { Connection, Credentials, Document, Node } from "../lib/vaultApi";
+import { ContextMenu, type CtxItem } from "./ContextMenu";
 import { colors } from "./styles";
 
 const protoColor: Record<string, string> = {
@@ -24,26 +25,63 @@ type Props = {
   onSelect: (node: Node) => void;
   onOpen: (node: Node) => void;
   onDelete: (id: string) => void;
+  onNewConnection: (parentId: string | null) => void;
+  onNewFolder: (parentId: string | null) => void;
 };
 
-export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete }: Props) {
-  if (doc.nodes.length === 0) {
-    return <div style={{ padding: 16, color: colors.dim, fontSize: 13 }}>Sem conexões ainda — cria a primeira →</div>;
+export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, onNewConnection, onNewFolder }: Props) {
+  const [menu, setMenu] = useState<{ x: number; y: number; items: CtxItem[] } | null>(null);
+
+  function itemsFor(node: Node | null): CtxItem[] {
+    if (!node) {
+      return [
+        { label: "Nova conexão", onClick: () => onNewConnection(null) },
+        { label: "Nova pasta", onClick: () => onNewFolder(null) },
+      ];
+    }
+    if (node.type === "folder") {
+      return [
+        { label: "Nova conexão aqui", onClick: () => onNewConnection(node.id) },
+        { label: "Nova pasta aqui", onClick: () => onNewFolder(node.id) },
+        "sep",
+        { label: "Editar", onClick: () => onSelect(node) },
+        { label: "Apagar", onClick: () => onDelete(node.id) },
+      ];
+    }
+    return [
+      { label: "Conectar", onClick: () => onOpen(node) },
+      { label: "Editar", onClick: () => onSelect(node) },
+      "sep",
+      { label: "Apagar", onClick: () => onDelete(node.id) },
+    ];
   }
+
+  function openMenu(e: MouseEvent, node: Node | null) {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY, items: itemsFor(node) });
+  }
+
   return (
-    <div style={{ padding: 6 }}>
-      {doc.nodes.map((n) => (
-        <TreeNode
-          key={n.id}
-          node={n}
-          depth={0}
-          chain={[]}
-          selectedId={selectedId}
-          onSelect={onSelect}
-          onOpen={onOpen}
-          onDelete={onDelete}
-        />
-      ))}
+    <div onContextMenu={(e) => openMenu(e, null)} style={{ padding: 6, minHeight: "100%" }}>
+      {doc.nodes.length === 0 ? (
+        <div style={{ padding: 12, color: colors.dim, fontSize: 13 }}>Vazio — botão-direito aqui para criar.</div>
+      ) : (
+        doc.nodes.map((n) => (
+          <TreeNode
+            key={n.id}
+            node={n}
+            depth={0}
+            chain={[]}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            onOpen={onOpen}
+            onDelete={onDelete}
+            onContext={openMenu}
+          />
+        ))
+      )}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
     </div>
   );
 }
@@ -56,6 +94,7 @@ function TreeNode({
   onSelect,
   onOpen,
   onDelete,
+  onContext,
 }: {
   node: Node;
   depth: number;
@@ -64,6 +103,7 @@ function TreeNode({
   onSelect: (node: Node) => void;
   onOpen: (node: Node) => void;
   onDelete: (id: string) => void;
+  onContext: (e: MouseEvent, node: Node) => void;
 }) {
   const pad = 8 + depth * 14;
 
@@ -72,6 +112,7 @@ function TreeNode({
       <div>
         <div
           onClick={() => onSelect(node)}
+          onContextMenu={(e) => onContext(e, node)}
           style={{ ...rowStyle(node.id === selectedId), paddingLeft: pad, cursor: "pointer", color: colors.dim }}
         >
           <span>📁 {node.name}</span>
@@ -87,6 +128,7 @@ function TreeNode({
             onSelect={onSelect}
             onOpen={onOpen}
             onDelete={onDelete}
+            onContext={onContext}
           />
         ))}
       </div>
@@ -99,7 +141,8 @@ function TreeNode({
     <div
       onClick={() => onSelect(node)}
       onDoubleClick={() => onOpen(node)}
-      title="Duplo-clique para abrir"
+      onContextMenu={(e) => onContext(e, node)}
+      title="Duplo-clique para abrir · botão-direito para opções"
       style={{ ...rowStyle(selected), paddingLeft: pad, cursor: "pointer" }}
     >
       <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
