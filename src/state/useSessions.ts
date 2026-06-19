@@ -11,6 +11,7 @@ export interface SessionTab {
   target: string; // host:port
   username?: string; // guardado p/ reconnect (gateway re-autentica SSH)
   password?: string;
+  keyPath?: string; // chave privada SSH (path), guardado p/ reconnect
   domain?: string; // domínio (RDP/NLA), usado pelo renderizador
   gateway?: Gateway; // jump host (SSH ProxyJump), guardado p/ reconnect
   wsUrl: string;
@@ -25,6 +26,7 @@ export interface OpenOpts {
   port?: number;
   username?: string;
   password?: string;
+  keyPath?: string;
   domain?: string;
   gateway?: Gateway;
 }
@@ -36,15 +38,17 @@ async function openGateway(
   protocol: Protocol,
   username?: string,
   password?: string,
+  keyPath?: string,
   gateway?: Gateway,
 ): Promise<{ wsUrl: string; error?: string }> {
   try {
-    // SSH: o gateway usa user/pass (russh) + gateway (jump host); VNC/raw ignoram.
+    // SSH: o gateway usa user/pass ou chave (russh) + gateway (jump host); VNC/raw ignoram.
     const info = await invoke<SessionInfo>("open_session", {
       target,
       kind: protocol,
       username,
       password,
+      keyPath,
       gateway,
     });
     return { wsUrl: info.wsUrl };
@@ -62,7 +66,7 @@ export function useSessions() {
     const port = opts.port ?? DEFAULT_PORT[opts.protocol];
     const target = `${opts.host}:${port}`;
     const id = crypto.randomUUID();
-    const { wsUrl, error } = await openGateway(target, opts.protocol, opts.username, opts.password, opts.gateway);
+    const { wsUrl, error } = await openGateway(target, opts.protocol, opts.username, opts.password, opts.keyPath, opts.gateway);
     setTabs((t) => [
       ...t,
       {
@@ -72,6 +76,7 @@ export function useSessions() {
         target,
         username: opts.username,
         password: opts.password,
+        keyPath: opts.keyPath,
         domain: opts.domain,
         gateway: opts.gateway,
         wsUrl,
@@ -89,7 +94,7 @@ export function useSessions() {
   const reconnect = useCallback(async (id: string) => {
     const tab = tabsRef.current.find((x) => x.id === id);
     if (!tab) return;
-    const { wsUrl, error } = await openGateway(tab.target, tab.protocol, tab.username, tab.password, tab.gateway);
+    const { wsUrl, error } = await openGateway(tab.target, tab.protocol, tab.username, tab.password, tab.keyPath, tab.gateway);
     setTabs((t) => t.map((x) => (x.id === id ? { ...x, wsUrl, error, epoch: x.epoch + 1 } : x)));
   }, []);
 
@@ -105,6 +110,7 @@ export function useSessions() {
         port: Number(tab.target.slice(i + 1)),
         username: tab.username,
         password: tab.password,
+        keyPath: tab.keyPath,
         domain: tab.domain,
         gateway: tab.gateway,
       });

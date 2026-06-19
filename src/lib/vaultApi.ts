@@ -7,6 +7,7 @@ export interface Credentials {
   username?: string;
   password?: string;
   domain?: string;
+  key_path?: string;
 }
 
 /** Jump host (SSH ProxyJump): tunela a sessão por este host. */
@@ -15,6 +16,7 @@ export interface Gateway {
   port?: number;
   username?: string;
   password?: string;
+  key_path?: string;
 }
 
 export interface Connection {

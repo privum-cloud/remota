@@ -18,6 +18,8 @@ pub struct SessionSpec {
     /// Credenciais para protocolos onde o gateway autentica (SSH). `None` p/ bridge cru.
     pub username: Option<String>,
     pub password: Option<String>,
+    /// Caminho da chave privada SSH (auth por chave, prioritária sobre password).
+    pub key_path: Option<String>,
     /// Jump host (SSH ProxyJump): se presente, liga ao destino tunelado por ele.
     pub gateway: Option<crate::model::Gateway>,
 }
@@ -33,15 +35,17 @@ impl SessionRegistry {
     }
 
     pub fn create(&self, target: String, kind: SessionKind) -> SessionSpec {
-        self.create_with_creds(target, kind, None, None, None)
+        self.create_with_creds(target, kind, None, None, None, None)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_with_creds(
         &self,
         target: String,
         kind: SessionKind,
         username: Option<String>,
         password: Option<String>,
+        key_path: Option<String>,
         gateway: Option<crate::model::Gateway>,
     ) -> SessionSpec {
         let spec = SessionSpec {
@@ -51,6 +55,7 @@ impl SessionRegistry {
             kind,
             username,
             password,
+            key_path,
             gateway,
         };
         self.sessions

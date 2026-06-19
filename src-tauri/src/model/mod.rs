@@ -19,6 +19,9 @@ pub struct Credentials {
     pub password: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
+    /// Caminho para a chave privada SSH (auth por chave). Tem prioridade sobre a password no SSH.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_path: Option<String>,
 }
 
 /// Jump host (SSH ProxyJump): liga ao destino TUNELADO através deste host.
@@ -31,6 +34,8 @@ pub struct Gateway {
     pub username: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_path: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -35,12 +35,14 @@ pub async fn connect_jump(gw: &Gateway) -> Result<Handle<AcceptAllHandler>, BoxE
     let config = Arc::new(Config::default());
     let port = gw.port.unwrap_or(22);
     let mut jump = client::connect(config, (gw.host.as_str(), port), AcceptAllHandler).await?;
-    let ok = jump
-        .authenticate_password(
-            gw.username.clone().unwrap_or_default(),
-            gw.password.clone().unwrap_or_default(),
-        )
-        .await?;
+    let user = gw.username.clone().unwrap_or_default();
+    let ok = if let Some(kp) = &gw.key_path {
+        let key = russh::keys::load_secret_key(kp, None)
+            .map_err(|e| format!("failed to load jump SSH key {kp}: {e}"))?;
+        jump.authenticate_publickey(user, Arc::new(key)).await?
+    } else {
+        jump.authenticate_password(user, gw.password.clone().unwrap_or_default()).await?
+    };
     if !ok {
         return Err("jump host authentication failed".into());
     }

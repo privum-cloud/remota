@@ -36,6 +36,7 @@ pub fn open_session(
     kind: String,
     username: Option<String>,
     password: Option<String>,
+    key_path: Option<String>,
     gateway: Option<Gateway>,
 ) -> SessionInfo {
     let session_kind = match kind.as_str() {
@@ -45,7 +46,7 @@ pub fn open_session(
     };
     let spec = state
         .registry
-        .create_with_creds(target, session_kind, username, password, gateway);
+        .create_with_creds(target, session_kind, username, password, key_path, gateway);
     SessionInfo {
         ws_url: build_ws_url(state.gateway_port, &spec),
         kind,
@@ -146,6 +147,7 @@ mod tests {
             kind: SessionKind::RawTcp,
             username: None,
             password: None,
+            key_path: None,
             gateway: None,
         };
         assert_eq!(
@@ -163,6 +165,7 @@ mod tests {
             kind: SessionKind::Ssh,
             username: Some("root".into()),
             password: Some("x".into()),
+            key_path: None,
             gateway: None,
         };
         assert_eq!(
@@ -180,6 +183,7 @@ mod tests {
             kind: SessionKind::RdpRdcleanpath,
             username: None,
             password: None,
+            key_path: None,
             gateway: None,
         };
         assert_eq!(

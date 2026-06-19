@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { Node, Protocol } from "../lib/vaultApi";
-import { colors, input, label, primaryBtn } from "./styles";
+import { colors, ghostBtn, input, label, primaryBtn } from "./styles";
 import { GatewaySection, type GwForm, emptyGw, gwFromModel, gwToModel } from "./GatewaySection";
+import { open } from "@tauri-apps/plugin-dialog";
 
 const PROTOCOLS: Protocol[] = ["ssh", "rdp", "vnc", "telnet"];
 const DEFAULT_PORT: Record<Protocol, number> = { ssh: 22, rdp: 3389, vnc: 5900, telnet: 23 };
@@ -22,6 +23,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [domain, setDomain] = useState("");
+  const [keyPath, setKeyPath] = useState("");
   const [gw, setGw] = useState<GwForm>(emptyGw);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -35,6 +37,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
     setUsername(e?.conn.credentials.username ?? "");
     setPassword(e?.conn.credentials.password ?? "");
     setDomain(e?.conn.credentials.domain ?? "");
+    setKeyPath(e?.conn.credentials.key_path ?? "");
     setGw(gwFromModel(e?.conn.gateway));
     setSaved(false);
   }, [node]);
@@ -56,6 +59,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
             username: username || undefined,
             password: password || undefined,
             domain: domain || undefined,
+            key_path: keyPath || undefined,
           },
           gateway: gwToModel(gw),
         },
@@ -65,6 +69,11 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function browseKey() {
+    const p = await open({ multiple: false, title: "Select SSH private key" });
+    if (typeof p === "string") setKeyPath(p);
   }
 
   const isRdp = protocol === "rdp";
@@ -121,6 +130,10 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
           {isRdp && (
             <input style={input} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="domain (RDP)" />
           )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={input} value={keyPath} onChange={(e) => setKeyPath(e.target.value)} placeholder="SSH private key (path, optional)" />
+            <button type="button" style={ghostBtn} onClick={browseKey} title="Pick a private key file">Browse…</button>
+          </div>
         </div>
       </div>
 

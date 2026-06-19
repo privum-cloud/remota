@@ -39,21 +39,11 @@ async fn run(
     let config = Arc::new(Config::default());
 
     // O jump (se houver) tem de ficar vivo durante toda a sessão, senão o túnel fecha.
-    let mut _jump_keepalive: Option<client::Handle<ClientHandler>> = None;
+    let mut _jump_keepalive: Option<client::Handle<crate::gateway::tunnel::AcceptAllHandler>> = None;
 
     let mut handle = if let Some(gw) = &spec.gateway {
-        // SSH ao jump host → abre um túnel direct-tcpip até ao destino → SSH sobre esse stream.
-        let gw_port = gw.port.unwrap_or(22);
-        let mut jump = client::connect(config.clone(), (gw.host.as_str(), gw_port), ClientHandler).await?;
-        let ok = jump
-            .authenticate_password(
-                gw.username.clone().unwrap_or_default(),
-                gw.password.clone().unwrap_or_default(),
-            )
-            .await?;
-        if !ok {
-            return Err("jump host authentication failed".into());
-        }
+        // SSH ao jump host (password OU chave) → túnel direct-tcpip → SSH sobre esse stream.
+        let jump = crate::gateway::tunnel::connect_jump(gw).await?;
         let (thost, tport) = split_host_port(&spec.target);
         let channel = jump
             .channel_open_direct_tcpip(thost, tport as u32, "127.0.0.1", 0)
@@ -65,9 +55,16 @@ async fn run(
         client::connect(config.clone(), spec.target.as_str(), ClientHandler).await?
     };
 
-    let authed = handle.authenticate_password(username, password).await?;
+    // Auth: chave SSH se houver key_path, senão password.
+    let authed = if let Some(kp) = &spec.key_path {
+        let key = russh::keys::load_secret_key(kp, None)
+            .map_err(|e| format!("failed to load SSH key {kp}: {e}"))?;
+        handle.authenticate_publickey(username, Arc::new(key)).await?
+    } else {
+        handle.authenticate_password(username, password).await?
+    };
     if !authed {
-        return Err("SSH authentication failed (username/password)".into());
+        return Err("SSH authentication failed (key/password)".into());
     }
 
     let mut channel = handle.channel_open_session().await?;

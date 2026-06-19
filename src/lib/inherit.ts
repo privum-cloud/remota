@@ -15,6 +15,7 @@ export function mergeCreds(parent: Credentials, child: Credentials): Credentials
     username: child.username ?? parent.username,
     password: child.password ?? parent.password,
     domain: child.domain ?? parent.domain,
+    key_path: child.key_path ?? parent.key_path,
   };
 }
 

@@ -70,6 +70,7 @@ export default function App() {
       port: found.node.conn.port,
       username: eff.username,
       password: eff.password,
+      keyPath: eff.key_path,
       domain: eff.domain,
       gateway: gw,
     });

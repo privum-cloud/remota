@@ -5,6 +5,7 @@ pub fn merge_credentials(parent: &Credentials, child: &Credentials) -> Credentia
         username: child.username.clone().or_else(|| parent.username.clone()),
         password: child.password.clone().or_else(|| parent.password.clone()),
         domain: child.domain.clone().or_else(|| parent.domain.clone()),
+        key_path: child.key_path.clone().or_else(|| parent.key_path.clone()),
     }
 }
 
@@ -34,6 +35,7 @@ mod tests {
             username: u.map(String::from),
             password: p.map(String::from),
             domain: d.map(String::from),
+            key_path: None,
         }
     }
 
