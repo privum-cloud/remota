@@ -1,0 +1,15 @@
+[package]
+name = "remota-relay"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "Remota self-hosted relay — brokers remota-agent connections over WSS"
+
+[dependencies]
+remota-proto = { path = "../proto" }
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
