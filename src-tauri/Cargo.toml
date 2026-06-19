@@ -32,6 +32,8 @@ aes-gcm = "0.10"
 getrandom = "0.2"
 zeroize = "1"
 dirs = "5"
+russh = "0.45"
+async-trait = "0.1"
 
 [dev-dependencies]
 tokio-tungstenite = "0.24"

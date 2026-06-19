@@ -1,5 +1,6 @@
 import type { SessionTab } from "../state/useSessions";
 import { VncView } from "../renderers/VncView";
+import { SshView } from "../renderers/SshView";
 import { colors } from "./styles";
 
 export function SessionView({ tab }: { tab: SessionTab }) {
@@ -16,6 +17,10 @@ export function SessionView({ tab }: { tab: SessionTab }) {
   if (tab.protocol === "vnc") {
     // key={epoch} força remount no reconnect (token é de uso único).
     return <VncView key={tab.epoch} wsUrl={tab.wsUrl} password={tab.password} />;
+  }
+
+  if (tab.protocol === "ssh") {
+    return <SshView key={tab.epoch} wsUrl={tab.wsUrl} />;
   }
 
   return (

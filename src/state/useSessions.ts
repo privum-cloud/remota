@@ -9,6 +9,7 @@ export interface SessionTab {
   title: string;
   protocol: Protocol;
   target: string; // host:port
+  username?: string; // guardado p/ reconnect (gateway re-autentica SSH)
   password?: string;
   wsUrl: string;
   epoch: number; // incrementa no reconnect para forçar remount do renderizador
@@ -20,14 +21,21 @@ export interface OpenOpts {
   protocol: Protocol;
   host: string;
   port?: number;
+  username?: string;
   password?: string;
 }
 
 const DEFAULT_PORT: Record<Protocol, number> = { ssh: 22, rdp: 3389, vnc: 5900, telnet: 23 };
 
-async function openGateway(target: string, protocol: Protocol): Promise<{ wsUrl: string; error?: string }> {
+async function openGateway(
+  target: string,
+  protocol: Protocol,
+  username?: string,
+  password?: string,
+): Promise<{ wsUrl: string; error?: string }> {
   try {
-    const info = await invoke<SessionInfo>("open_session", { target, kind: protocol });
+    // Para SSH o gateway usa user/pass (russh); para VNC/raw são ignorados.
+    const info = await invoke<SessionInfo>("open_session", { target, kind: protocol, username, password });
     return { wsUrl: info.wsUrl };
   } catch (e) {
     return { wsUrl: "", error: String(e) };
@@ -43,10 +51,20 @@ export function useSessions() {
     const port = opts.port ?? DEFAULT_PORT[opts.protocol];
     const target = `${opts.host}:${port}`;
     const id = crypto.randomUUID();
-    const { wsUrl, error } = await openGateway(target, opts.protocol);
+    const { wsUrl, error } = await openGateway(target, opts.protocol, opts.username, opts.password);
     setTabs((t) => [
       ...t,
-      { id, title: opts.title, protocol: opts.protocol, target, password: opts.password, wsUrl, epoch: 0, error },
+      {
+        id,
+        title: opts.title,
+        protocol: opts.protocol,
+        target,
+        username: opts.username,
+        password: opts.password,
+        wsUrl,
+        epoch: 0,
+        error,
+      },
     ]);
     return id;
   }, []);
@@ -58,7 +76,7 @@ export function useSessions() {
   const reconnect = useCallback(async (id: string) => {
     const tab = tabsRef.current.find((x) => x.id === id);
     if (!tab) return;
-    const { wsUrl, error } = await openGateway(tab.target, tab.protocol);
+    const { wsUrl, error } = await openGateway(tab.target, tab.protocol, tab.username, tab.password);
     setTabs((t) => t.map((x) => (x.id === id ? { ...x, wsUrl, error, epoch: x.epoch + 1 } : x)));
   }, []);
 
@@ -72,6 +90,7 @@ export function useSessions() {
         protocol: tab.protocol,
         host: tab.target.slice(0, i),
         port: Number(tab.target.slice(i + 1)),
+        username: tab.username,
         password: tab.password,
       });
     },

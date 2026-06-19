@@ -25,6 +25,7 @@ pub fn router(registry: Arc<SessionRegistry>) -> Router {
     // axum 0.8: parâmetro de rota usa `{id}` (sintaxe `:id` faz panic no build).
     Router::new()
         .route("/session/{id}", get(session_handler))
+        .route("/ssh/{id}", get(ssh_handler))
         .with_state(registry)
 }
 
@@ -47,6 +48,18 @@ async fn session_handler(
 ) -> Response {
     match registry.consume(&id, &q.token) {
         Some(spec) => ws.on_upgrade(move |socket| bridge_raw_tcp(socket, spec)),
+        None => StatusCode::UNAUTHORIZED.into_response(),
+    }
+}
+
+async fn ssh_handler(
+    ws: WebSocketUpgrade,
+    Path(id): Path<String>,
+    Query(q): Query<TokenQuery>,
+    State(registry): State<Arc<SessionRegistry>>,
+) -> Response {
+    match registry.consume(&id, &q.token) {
+        Some(spec) => ws.on_upgrade(move |socket| crate::gateway::ssh::proxy_ssh(socket, spec)),
         None => StatusCode::UNAUTHORIZED.into_response(),
     }
 }

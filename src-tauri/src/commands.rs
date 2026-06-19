@@ -24,17 +24,27 @@ pub fn build_ws_url(port: u16, spec: &SessionSpec) -> String {
     let route = match spec.kind {
         SessionKind::RawTcp => "session",
         SessionKind::RdpRdcleanpath => "rdp",
+        SessionKind::Ssh => "ssh",
     };
     format!("ws://127.0.0.1:{port}/{route}/{}?token={}", spec.id, spec.token)
 }
 
 #[tauri::command]
-pub fn open_session(state: State<AppState>, target: String, kind: String) -> SessionInfo {
+pub fn open_session(
+    state: State<AppState>,
+    target: String,
+    kind: String,
+    username: Option<String>,
+    password: Option<String>,
+) -> SessionInfo {
     let session_kind = match kind.as_str() {
         "rdp" => SessionKind::RdpRdcleanpath,
+        "ssh" => SessionKind::Ssh,
         _ => SessionKind::RawTcp,
     };
-    let spec = state.registry.create(target, session_kind);
+    let spec = state
+        .registry
+        .create_with_creds(target, session_kind, username, password);
     SessionInfo {
         ws_url: build_ws_url(state.gateway_port, &spec),
         kind,
@@ -87,10 +97,28 @@ mod tests {
             token: "tok".into(),
             target: "10.0.0.5:5900".into(),
             kind: SessionKind::RawTcp,
+            username: None,
+            password: None,
         };
         assert_eq!(
             build_ws_url(7000, &spec),
             "ws://127.0.0.1:7000/session/abc?token=tok"
+        );
+    }
+
+    #[test]
+    fn ws_url_ssh_usa_rota_ssh() {
+        let spec = SessionSpec {
+            id: "s1".into(),
+            token: "tk".into(),
+            target: "10.0.0.9:22".into(),
+            kind: SessionKind::Ssh,
+            username: Some("root".into()),
+            password: Some("x".into()),
+        };
+        assert_eq!(
+            build_ws_url(7000, &spec),
+            "ws://127.0.0.1:7000/ssh/s1?token=tk"
         );
     }
 
@@ -101,6 +129,8 @@ mod tests {
             token: "t2".into(),
             target: "win:3389".into(),
             kind: SessionKind::RdpRdcleanpath,
+            username: None,
+            password: None,
         };
         assert_eq!(
             build_ws_url(7000, &spec),

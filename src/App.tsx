@@ -30,6 +30,7 @@ export default function App() {
       protocol: found.node.conn.protocol,
       host: found.node.conn.host,
       port: found.node.conn.port,
+      username: eff.username,
       password: eff.password,
     });
     setActive(newId);

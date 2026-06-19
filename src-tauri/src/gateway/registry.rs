@@ -6,6 +6,7 @@ use uuid::Uuid;
 pub enum SessionKind {
     RawTcp,
     RdpRdcleanpath,
+    Ssh,
 }
 
 #[derive(Clone, Debug)]
@@ -14,6 +15,9 @@ pub struct SessionSpec {
     pub token: String,
     pub target: String,
     pub kind: SessionKind,
+    /// Credenciais para protocolos onde o gateway autentica (SSH). `None` p/ bridge cru.
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 #[derive(Default)]
@@ -27,11 +31,23 @@ impl SessionRegistry {
     }
 
     pub fn create(&self, target: String, kind: SessionKind) -> SessionSpec {
+        self.create_with_creds(target, kind, None, None)
+    }
+
+    pub fn create_with_creds(
+        &self,
+        target: String,
+        kind: SessionKind,
+        username: Option<String>,
+        password: Option<String>,
+    ) -> SessionSpec {
         let spec = SessionSpec {
             id: Uuid::new_v4().to_string(),
             token: Uuid::new_v4().to_string(),
             target,
             kind,
+            username,
+            password,
         };
         self.sessions
             .lock()
