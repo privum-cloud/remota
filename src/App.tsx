@@ -8,11 +8,11 @@ import { FolderEditor } from "./components/FolderEditor";
 import { TabBar } from "./components/TabBar";
 import { SessionView } from "./components/SessionView";
 import { MenuBar, type Menu } from "./components/MenuBar";
-import { findConnWithChain, findParentId, nodeExists } from "./lib/tree";
+import { findConnWithChain, findNode, findParentId, nodeExists } from "./lib/tree";
 import { resolveCreds } from "./lib/inherit";
 import type { Node } from "./lib/vaultApi";
 import { vaultApi } from "./lib/vaultApi";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { colors } from "./components/styles";
 
 type Editing = { kind: "connection" | "folder"; node: Node | null; parentId: string | null };
@@ -89,6 +89,19 @@ export default function App() {
     }
   }
 
+  async function deleteNode(id: string) {
+    const node = findNode(v.tree, id);
+    const name = node?.name ?? "este item";
+    const isFolder = node?.type === "folder";
+    const msg = isFolder
+      ? `Apagar a pasta "${name}" e tudo o que está dentro? Esta ação não pode ser desfeita.`
+      : `Apagar a conexão "${name}"? Esta ação não pode ser desfeita.`;
+    const ok = await confirm(msg, { title: "Confirmar", kind: "warning", okLabel: "Apagar", cancelLabel: "Cancelar" });
+    if (!ok) return;
+    await v.remove(id);
+    if (selected?.id === id) setEditing({ kind: "connection", node: null, parentId: null });
+  }
+
   const menus: Menu[] = [
     {
       title: "Ficheiro",
@@ -137,7 +150,7 @@ export default function App() {
             selectedId={selected?.id ?? null}
             onSelect={selectNode}
             onOpen={(n) => { if (n.type === "connection") openConn(n.id); }}
-            onDelete={(id) => { v.remove(id); if (selected?.id === id) setEditing({ kind: "connection", node: null, parentId: null }); }}
+            onDelete={deleteNode}
             onNewConnection={newConnectionAt}
             onNewFolder={newFolderAt}
           />

@@ -35,6 +35,21 @@ export function findParentId(doc: Document, id: string): string | null {
   return walk(doc.nodes, null) ?? null;
 }
 
+/** Devolve o nó com este id (pasta ou conexão), ou null. */
+export function findNode(doc: Document, id: string): Node | null {
+  function walk(nodes: Node[]): Node | null {
+    for (const n of nodes) {
+      if (n.id === id) return n;
+      if (n.type === "folder") {
+        const r = walk(n.children);
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+  return walk(doc.nodes);
+}
+
 /** `true` se um nó com este id já existe na árvore. */
 export function nodeExists(doc: Document, id: string): boolean {
   function walk(nodes: Node[]): boolean {
