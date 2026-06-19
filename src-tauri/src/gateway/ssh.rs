@@ -62,14 +62,21 @@ async fn run(
 
     // Auth: chave SSH se houver key_path, senão password.
     let authed = if let Some(kp) = &spec.key_path {
-        let key = russh::keys::load_secret_key(kp, None)
-            .map_err(|e| format!("failed to load SSH key {kp}: {e}"))?;
-        handle.authenticate_publickey(username, Arc::new(key)).await?
+        let key = russh::keys::load_secret_key(kp, None).map_err(|e| {
+            format!(
+                "could not load SSH private key '{kp}': {e}. Use the PRIVATE key (not the .pub file); \
+                 passphrase-protected keys aren't supported yet."
+            )
+        })?;
+        handle.authenticate_publickey(username.clone(), Arc::new(key)).await?
     } else {
-        handle.authenticate_password(username, password).await?
+        handle.authenticate_password(username.clone(), password).await?
     };
     if !authed {
-        return Err("SSH authentication failed (key/password)".into());
+        let how = if spec.key_path.is_some() { "SSH key" } else { "password" };
+        return Err(
+            format!("SSH authentication failed for user '{username}' using {how} — check the username and {how}.").into(),
+        );
     }
 
     let mut channel = handle.channel_open_session().await?;

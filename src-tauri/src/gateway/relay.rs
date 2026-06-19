@@ -43,7 +43,7 @@ pub async fn connect_relay(
     );
     let (ws, _) = connect_async(&data_url)
         .await
-        .map_err(|e| format!("relay data channel ({data_url}): {e}"))?;
+        .map_err(|e| format!("relay data channel for session {session_id}: {e}"))?;
 
     // 3) Ponte wss <-> duplex; devolve a metade `near` como stream.
     let (near, far) = tokio::io::duplex(64 * 1024);
@@ -85,6 +85,7 @@ async fn broker_session(
     };
 
     parse_session_response(&raw)
+        .map_err(|e| -> BoxErr { format!("could not reach agent '{}' via relay: {e}", relay.agent_id).into() })
 }
 
 /// Abre TLS (rustls/ring + raízes webpki) a `host:port`.
@@ -149,7 +150,12 @@ fn parse_session_response(raw: &[u8]) -> Result<(String, String), BoxErr> {
         .unwrap_or("");
     let body = text.split("\r\n\r\n").nth(1).unwrap_or("").trim();
     if status != "200" {
-        return Err(format!("relay POST /session -> HTTP {status}: {body}").into());
+        let reason = match status {
+            "404" => "agent offline or not registered on the relay".to_string(),
+            "403" => "forbidden — this machine's IP is not allowed to broker sessions (relay gate)".to_string(),
+            _ => format!("relay returned HTTP {status}: {body}"),
+        };
+        return Err(reason.into());
     }
     let v: serde_json::Value =
         serde_json::from_str(body).map_err(|e| format!("bad /session JSON: {e} ({body})"))?;
