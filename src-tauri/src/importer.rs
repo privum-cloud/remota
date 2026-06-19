@@ -31,6 +31,7 @@ fn parse_children(parent: roxmltree::Node) -> Vec<Node> {
                 id: Uuid::new_v4().to_string(),
                 name,
                 defaults: Credentials::default(),
+                gateway: None,
                 children: parse_children(el),
             });
         } else {
@@ -47,6 +48,7 @@ fn parse_children(parent: roxmltree::Node) -> Vec<Node> {
                     host,
                     port,
                     credentials: Credentials { username, password: None, domain },
+                    gateway: None,
                 },
             });
         }

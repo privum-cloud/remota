@@ -1,23 +1,22 @@
-import type { Credentials, Document, Node } from "./vaultApi";
+import type { Credentials, Document, Gateway, Node } from "./vaultApi";
 
 export type ConnectionNode = Extract<Node, { type: "connection" }>;
 
-/** Localiza uma conexão pelo id e devolve a cadeia de defaults das pastas-pai (raiz→pai). */
-export function findConnWithChain(
-  doc: Document,
-  id: string,
-): { node: ConnectionNode; chain: Credentials[] } | null {
-  function walk(nodes: Node[], chain: Credentials[]): { node: ConnectionNode; chain: Credentials[] } | null {
+type Found = { node: ConnectionNode; chain: Credentials[]; gateways: (Gateway | undefined)[] };
+
+/** Localiza uma conexão e devolve as cadeias (raiz→pai) de defaults e de gateways das pastas-pai. */
+export function findConnWithChain(doc: Document, id: string): Found | null {
+  function walk(nodes: Node[], chain: Credentials[], gws: (Gateway | undefined)[]): Found | null {
     for (const n of nodes) {
-      if (n.type === "connection" && n.id === id) return { node: n, chain };
+      if (n.type === "connection" && n.id === id) return { node: n, chain, gateways: gws };
       if (n.type === "folder") {
-        const r = walk(n.children, [...chain, n.defaults]);
+        const r = walk(n.children, [...chain, n.defaults], [...gws, n.gateway]);
         if (r) return r;
       }
     }
     return null;
   }
-  return walk(doc.nodes, []);
+  return walk(doc.nodes, [], []);
 }
 
 /** Id da pasta-pai de um nó, ou `null` se está na raiz. Usado para manter o nó no lugar ao editar. */

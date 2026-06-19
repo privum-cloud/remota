@@ -9,11 +9,20 @@ export interface Credentials {
   domain?: string;
 }
 
+/** Jump host (SSH ProxyJump): tunela a sessão por este host. */
+export interface Gateway {
+  host: string;
+  port?: number;
+  username?: string;
+  password?: string;
+}
+
 export interface Connection {
   protocol: Protocol;
   host: string;
   port?: number;
   credentials: Credentials;
+  gateway?: Gateway;
 }
 
 // Enum internamente-tageado (#[serde(tag = "type")]) do Rust.
@@ -23,6 +32,7 @@ export type Node =
       id: string;
       name: string;
       defaults: Credentials;
+      gateway?: Gateway;
       children: Node[];
     }
   | { type: "connection"; id: string; name: string; conn: Connection };

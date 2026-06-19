@@ -37,7 +37,33 @@ async fn run(
     let password = spec.password.clone().unwrap_or_default();
 
     let config = Arc::new(Config::default());
-    let mut handle = client::connect(config, spec.target.as_str(), ClientHandler).await?;
+
+    // O jump (se houver) tem de ficar vivo durante toda a sessão, senão o túnel fecha.
+    let mut _jump_keepalive: Option<client::Handle<ClientHandler>> = None;
+
+    let mut handle = if let Some(gw) = &spec.gateway {
+        // SSH ao jump host → abre um túnel direct-tcpip até ao destino → SSH sobre esse stream.
+        let gw_port = gw.port.unwrap_or(22);
+        let mut jump = client::connect(config.clone(), (gw.host.as_str(), gw_port), ClientHandler).await?;
+        let ok = jump
+            .authenticate_password(
+                gw.username.clone().unwrap_or_default(),
+                gw.password.clone().unwrap_or_default(),
+            )
+            .await?;
+        if !ok {
+            return Err("autenticação no jump host falhou".into());
+        }
+        let (thost, tport) = split_host_port(&spec.target);
+        let channel = jump
+            .channel_open_direct_tcpip(thost, tport as u32, "127.0.0.1", 0)
+            .await?;
+        let target = client::connect_stream(config.clone(), channel.into_stream(), ClientHandler).await?;
+        _jump_keepalive = Some(jump);
+        target
+    } else {
+        client::connect(config.clone(), spec.target.as_str(), ClientHandler).await?
+    };
 
     let authed = handle.authenticate_password(username, password).await?;
     if !authed {
@@ -78,4 +104,12 @@ async fn run(
 
     let _ = channel.eof().await;
     Ok(())
+}
+
+/// Separa "host:porta" em (host, porta). Default 22 se faltar/inválida.
+fn split_host_port(target: &str) -> (String, u16) {
+    match target.rsplit_once(':') {
+        Some((h, p)) => (h.to_string(), p.parse().unwrap_or(22)),
+        None => (target.to_string(), 22),
+    }
 }

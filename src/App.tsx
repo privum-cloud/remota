@@ -9,7 +9,7 @@ import { TabBar } from "./components/TabBar";
 import { SessionView } from "./components/SessionView";
 import { MenuBar, type Menu } from "./components/MenuBar";
 import { findConnWithChain, findNode, findParentId, nodeExists } from "./lib/tree";
-import { resolveCreds } from "./lib/inherit";
+import { resolveCreds, resolveGateway } from "./lib/inherit";
 import type { Node } from "./lib/vaultApi";
 import { vaultApi } from "./lib/vaultApi";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
@@ -62,6 +62,7 @@ export default function App() {
     const found = findConnWithChain(v.tree, id);
     if (!found) return;
     const eff = resolveCreds(found.chain, found.node.conn);
+    const gw = resolveGateway(found.gateways, found.node.conn);
     const newId = await s.openSession({
       title: found.node.name,
       protocol: found.node.conn.protocol,
@@ -69,6 +70,7 @@ export default function App() {
       port: found.node.conn.port,
       username: eff.username,
       password: eff.password,
+      gateway: gw,
     });
     setActive(newId);
   }

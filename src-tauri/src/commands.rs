@@ -4,7 +4,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::gateway::{SessionKind, SessionRegistry, SessionSpec};
-use crate::model::{Document, Node};
+use crate::model::{Document, Gateway, Node};
 use crate::vault::{VaultError, VaultManager};
 
 pub struct AppState {
@@ -36,6 +36,7 @@ pub fn open_session(
     kind: String,
     username: Option<String>,
     password: Option<String>,
+    gateway: Option<Gateway>,
 ) -> SessionInfo {
     let session_kind = match kind.as_str() {
         "rdp" => SessionKind::RdpRdcleanpath,
@@ -44,7 +45,7 @@ pub fn open_session(
     };
     let spec = state
         .registry
-        .create_with_creds(target, session_kind, username, password);
+        .create_with_creds(target, session_kind, username, password, gateway);
     SessionInfo {
         ws_url: build_ws_url(state.gateway_port, &spec),
         kind,
@@ -119,6 +120,7 @@ mod tests {
             kind: SessionKind::RawTcp,
             username: None,
             password: None,
+            gateway: None,
         };
         assert_eq!(
             build_ws_url(7000, &spec),
@@ -135,6 +137,7 @@ mod tests {
             kind: SessionKind::Ssh,
             username: Some("root".into()),
             password: Some("x".into()),
+            gateway: None,
         };
         assert_eq!(
             build_ws_url(7000, &spec),
@@ -151,6 +154,7 @@ mod tests {
             kind: SessionKind::RdpRdcleanpath,
             username: None,
             password: None,
+            gateway: None,
         };
         assert_eq!(
             build_ws_url(7000, &spec),

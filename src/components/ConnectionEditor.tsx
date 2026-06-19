@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { Node, Protocol } from "../lib/vaultApi";
 import { colors, input, label, primaryBtn } from "./styles";
+import { GatewaySection, type GwForm, emptyGw, gwFromModel, gwToModel } from "./GatewaySection";
 
 const PROTOCOLS: Protocol[] = ["ssh", "rdp", "vnc", "telnet"];
 const DEFAULT_PORT: Record<Protocol, number> = { ssh: 22, rdp: 3389, vnc: 5900, telnet: 23 };
@@ -21,6 +22,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [domain, setDomain] = useState("");
+  const [gw, setGw] = useState<GwForm>(emptyGw);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -33,6 +35,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
     setUsername(e?.conn.credentials.username ?? "");
     setPassword(e?.conn.credentials.password ?? "");
     setDomain(e?.conn.credentials.domain ?? "");
+    setGw(gwFromModel(e?.conn.gateway));
     setSaved(false);
   }, [node]);
 
@@ -54,6 +57,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
             password: password || undefined,
             domain: domain || undefined,
           },
+          gateway: gwToModel(gw),
         },
       };
       await onSave(built);
@@ -119,6 +123,8 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
           )}
         </div>
       </div>
+
+      <GatewaySection value={gw} onChange={setGw} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button type="submit" disabled={busy || !name || !host} style={{ ...primaryBtn, opacity: busy || !name || !host ? 0.6 : 1 }}>

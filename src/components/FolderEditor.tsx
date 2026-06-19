@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import type { Node } from "../lib/vaultApi";
 import { colors, input, label, primaryBtn } from "./styles";
+import { GatewaySection, type GwForm, emptyGw, gwFromModel, gwToModel } from "./GatewaySection";
 
 export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: Node) => Promise<void> }) {
   const editingId = node?.type === "folder" ? node.id : null;
@@ -9,6 +10,7 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [domain, setDomain] = useState("");
+  const [gw, setGw] = useState<GwForm>(emptyGw);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -18,6 +20,7 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
     setUsername(f?.defaults.username ?? "");
     setPassword(f?.defaults.password ?? "");
     setDomain(f?.defaults.domain ?? "");
+    setGw(gwFromModel(f?.gateway));
     setSaved(false);
   }, [node]);
 
@@ -35,6 +38,7 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
           password: password || undefined,
           domain: domain || undefined,
         },
+        gateway: gwToModel(gw),
         children: existingChildren, // preserva a subárvore ao editar
       };
       await onSave(built);
@@ -58,6 +62,8 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
           <input style={input} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="domínio" />
         </div>
       </div>
+      <GatewaySection value={gw} onChange={setGw} hint="Todas as conexões dentro desta pasta saem por este jump host (a não ser que definam o seu próprio)." />
+
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button type="submit" disabled={busy || !name} style={{ ...primaryBtn, opacity: busy || !name ? 0.6 : 1 }}>
           {busy ? "…" : "Guardar"}

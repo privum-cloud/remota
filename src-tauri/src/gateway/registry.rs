@@ -18,6 +18,8 @@ pub struct SessionSpec {
     /// Credenciais para protocolos onde o gateway autentica (SSH). `None` p/ bridge cru.
     pub username: Option<String>,
     pub password: Option<String>,
+    /// Jump host (SSH ProxyJump): se presente, liga ao destino tunelado por ele.
+    pub gateway: Option<crate::model::Gateway>,
 }
 
 #[derive(Default)]
@@ -31,7 +33,7 @@ impl SessionRegistry {
     }
 
     pub fn create(&self, target: String, kind: SessionKind) -> SessionSpec {
-        self.create_with_creds(target, kind, None, None)
+        self.create_with_creds(target, kind, None, None, None)
     }
 
     pub fn create_with_creds(
@@ -40,6 +42,7 @@ impl SessionRegistry {
         kind: SessionKind,
         username: Option<String>,
         password: Option<String>,
+        gateway: Option<crate::model::Gateway>,
     ) -> SessionSpec {
         let spec = SessionSpec {
             id: Uuid::new_v4().to_string(),
@@ -48,6 +51,7 @@ impl SessionRegistry {
             kind,
             username,
             password,
+            gateway,
         };
         self.sessions
             .lock()

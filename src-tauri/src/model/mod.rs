@@ -21,6 +21,18 @@ pub struct Credentials {
     pub domain: Option<String>,
 }
 
+/// Jump host (SSH ProxyJump): liga ao destino TUNELADO através deste host.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Gateway {
+    pub host: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Connection {
     pub protocol: Protocol,
@@ -29,6 +41,8 @@ pub struct Connection {
     pub port: Option<u16>,
     #[serde(default)]
     pub credentials: Credentials,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gateway: Option<Gateway>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -39,6 +53,8 @@ pub enum Node {
         name: String,
         #[serde(default)]
         defaults: Credentials,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gateway: Option<Gateway>,
         #[serde(default)]
         children: Vec<Node>,
     },
@@ -113,6 +129,7 @@ mod tests {
             host: host.into(),
             port: None,
             credentials: Credentials::default(),
+            gateway: None,
         }
     }
 
@@ -123,6 +140,7 @@ mod tests {
                 id: "f1".into(),
                 name: "Prod".into(),
                 defaults: Credentials { username: Some("root".into()), ..Default::default() },
+                gateway: None,
                 children: vec![Node::Connection {
                     id: "c1".into(),
                     name: "web".into(),
@@ -142,6 +160,7 @@ mod tests {
                 id: "f1".into(),
                 name: "Prod".into(),
                 defaults: Credentials::default(),
+                gateway: None,
                 children: vec![Node::Connection {
                     id: "c1".into(),
                     name: "web".into(),
@@ -160,6 +179,7 @@ mod tests {
                 id: "f1".into(),
                 name: "Prod".into(),
                 defaults: Credentials::default(),
+                gateway: None,
                 children: vec![Node::Connection {
                     id: "c1".into(),
                     name: "web".into(),

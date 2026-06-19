@@ -150,6 +150,7 @@ mod tests {
                 host: host.into(),
                 port: None,
                 credentials: Credentials::default(),
+                gateway: None,
             },
         }
     }
