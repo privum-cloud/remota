@@ -31,6 +31,16 @@ type Props = {
 
 export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, onNewConnection, onNewFolder }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; items: CtxItem[] } | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+
+  function toggle(id: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function itemsFor(node: Node | null): CtxItem[] {
     if (!node) {
@@ -74,6 +84,8 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
             depth={0}
             chain={[]}
             selectedId={selectedId}
+            collapsed={collapsed}
+            onToggle={toggle}
             onSelect={onSelect}
             onOpen={onOpen}
             onDelete={onDelete}
@@ -91,6 +103,8 @@ function TreeNode({
   depth,
   chain,
   selectedId,
+  collapsed,
+  onToggle,
   onSelect,
   onOpen,
   onDelete,
@@ -100,6 +114,8 @@ function TreeNode({
   depth: number;
   chain: Credentials[];
   selectedId: string | null;
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
   onSelect: (node: Node) => void;
   onOpen: (node: Node) => void;
   onDelete: (id: string) => void;
@@ -108,29 +124,43 @@ function TreeNode({
   const pad = 8 + depth * 14;
 
   if (node.type === "folder") {
+    const isCollapsed = collapsed.has(node.id);
+    const hasChildren = node.children.length > 0;
     return (
       <div>
         <div
           onClick={() => onSelect(node)}
+          onDoubleClick={() => onToggle(node.id)}
           onContextMenu={(e) => onContext(e, node)}
           style={{ ...rowStyle(node.id === selectedId), paddingLeft: pad, cursor: "pointer", color: colors.dim }}
         >
-          <span>📁 {node.name}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+            <span
+              onClick={(e) => { e.stopPropagation(); if (hasChildren) onToggle(node.id); }}
+              style={{ width: 12, textAlign: "center", fontSize: 10, cursor: hasChildren ? "pointer" : "default" }}
+            >
+              {hasChildren ? (isCollapsed ? "▸" : "▾") : ""}
+            </span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📁 {node.name}</span>
+          </span>
           <DeleteBtn onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} />
         </div>
-        {node.children.map((c) => (
-          <TreeNode
-            key={c.id}
-            node={c}
-            depth={depth + 1}
-            chain={[...chain, node.defaults]}
-            selectedId={selectedId}
-            onSelect={onSelect}
-            onOpen={onOpen}
-            onDelete={onDelete}
-            onContext={onContext}
-          />
-        ))}
+        {!isCollapsed &&
+          node.children.map((c) => (
+            <TreeNode
+              key={c.id}
+              node={c}
+              depth={depth + 1}
+              chain={[...chain, node.defaults]}
+              selectedId={selectedId}
+              collapsed={collapsed}
+              onToggle={onToggle}
+              onSelect={onSelect}
+              onOpen={onOpen}
+              onDelete={onDelete}
+              onContext={onContext}
+            />
+          ))}
       </div>
     );
   }
