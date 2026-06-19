@@ -70,9 +70,12 @@ function TreeNode({
   if (node.type === "folder") {
     return (
       <div>
-        <div style={{ ...rowStyle(false), paddingLeft: pad, color: colors.dim }}>
+        <div
+          onClick={() => onSelect(node)}
+          style={{ ...rowStyle(node.id === selectedId), paddingLeft: pad, cursor: "pointer", color: colors.dim }}
+        >
           <span>📁 {node.name}</span>
-          <DeleteBtn onClick={() => onDelete(node.id)} />
+          <DeleteBtn onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} />
         </div>
         {node.children.map((c) => (
           <TreeNode

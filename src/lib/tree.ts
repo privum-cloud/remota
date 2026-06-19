@@ -19,3 +19,30 @@ export function findConnWithChain(
   }
   return walk(doc.nodes, []);
 }
+
+/** Id da pasta-pai de um nó, ou `null` se está na raiz. Usado para manter o nó no lugar ao editar. */
+export function findParentId(doc: Document, id: string): string | null {
+  function walk(nodes: Node[], parent: string | null): string | null | undefined {
+    for (const n of nodes) {
+      if (n.id === id) return parent;
+      if (n.type === "folder") {
+        const r = walk(n.children, n.id);
+        if (r !== undefined) return r;
+      }
+    }
+    return undefined; // não encontrado neste ramo
+  }
+  return walk(doc.nodes, null) ?? null;
+}
+
+/** `true` se um nó com este id já existe na árvore. */
+export function nodeExists(doc: Document, id: string): boolean {
+  function walk(nodes: Node[]): boolean {
+    for (const n of nodes) {
+      if (n.id === id) return true;
+      if (n.type === "folder" && walk(n.children)) return true;
+    }
+    return false;
+  }
+  return walk(doc.nodes);
+}

@@ -4,22 +4,55 @@ import { useSessions } from "./state/useSessions";
 import { VaultUnlock } from "./components/VaultUnlock";
 import { ConnectionTree } from "./components/ConnectionTree";
 import { ConnectionEditor } from "./components/ConnectionEditor";
+import { FolderEditor } from "./components/FolderEditor";
 import { TabBar } from "./components/TabBar";
 import { SessionView } from "./components/SessionView";
-import { findConnWithChain } from "./lib/tree";
+import { MenuBar, type Menu } from "./components/MenuBar";
+import { findConnWithChain, findParentId, nodeExists } from "./lib/tree";
 import { resolveCreds } from "./lib/inherit";
 import type { Node } from "./lib/vaultApi";
-import { colors, ghostBtn } from "./components/styles";
+import { colors } from "./components/styles";
+
+type Editing = { kind: "connection" | "folder"; node: Node | null; parentId: string | null };
 
 export default function App() {
   const v = useVault();
   const s = useSessions();
-  const [selected, setSelected] = useState<Node | null>(null);
-  // aba ativa: "editor" ou o id de uma sessão.
+  const [editing, setEditing] = useState<Editing>({ kind: "connection", node: null, parentId: null });
   const [active, setActive] = useState<string>("editor");
+  const [notice, setNotice] = useState<string | null>(null);
 
   if (v.status === "checking") return <Center>A verificar o cofre…</Center>;
   if (v.status === "locked") return <VaultUnlock exists={v.exists} error={v.error} onUnlock={v.unlock} />;
+
+  const selected = editing.node;
+  // novo nó vai dentro da pasta selecionada (se houver), senão na raiz.
+  const targetParent = selected?.type === "folder" ? selected.id : null;
+
+  function selectNode(n: Node) {
+    setEditing({ kind: n.type === "folder" ? "folder" : "connection", node: n, parentId: findParentId(v.tree, n.id) });
+    setActive("editor");
+  }
+  function newConnection() {
+    setEditing({ kind: "connection", node: null, parentId: targetParent });
+    setActive("editor");
+  }
+  function newFolder() {
+    setEditing({ kind: "folder", node: null, parentId: targetParent });
+    setActive("editor");
+  }
+  function lock() {
+    v.lock();
+    setEditing({ kind: "connection", node: null, parentId: null });
+    setActive("editor");
+  }
+
+  async function saveNode(n: Node) {
+    // mantém o nó no lugar: existente → pai atual; novo → pai-alvo da criação.
+    const parentId = nodeExists(v.tree, n.id) ? findParentId(v.tree, n.id) : editing.parentId;
+    await v.save(parentId, n);
+    setEditing({ kind: n.type === "folder" ? "folder" : "connection", node: n, parentId });
+  }
 
   async function openConn(id: string) {
     const found = findConnWithChain(v.tree, id);
@@ -35,31 +68,60 @@ export default function App() {
     });
     setActive(newId);
   }
-
   function closeTab(id: string) {
     s.closeSession(id);
     setActive((cur) => (cur === id ? "editor" : cur));
   }
 
+  const menus: Menu[] = [
+    {
+      title: "Ficheiro",
+      items: [
+        { label: "Nova conexão", onClick: newConnection },
+        { label: "Nova pasta", onClick: newFolder },
+        "sep",
+        { label: "Importar do mRemoteNG (confCons.xml)…", onClick: () => setNotice("Import do confCons.xml chega no M4 (parser do formato cifrado do mRemoteNG).") },
+        { label: "Exportar conexões…", onClick: () => setNotice("Export (cópia do cofre cifrado connections.dat, ou JSON) chega a seguir.") },
+        "sep",
+        { label: "Bloquear cofre", onClick: lock },
+      ],
+    },
+    {
+      title: "Ajuda",
+      items: [
+        { label: "Sobre o Remota", onClick: () => setNotice("Remota — gestor de conexões remotas multi-protocolo para Linux. Clean-room, AGPLv3.") },
+      ],
+    },
+  ];
+
   return (
     <div style={shell}>
-      <header style={headerStyle}>
-        <strong style={{ fontSize: 15 }}>Remota</strong>
-        <span style={{ color: colors.dim, fontSize: 12 }}>cofre destravado</span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button style={ghostBtn} onClick={() => { setSelected(null); setActive("editor"); }}>+ Nova conexão</button>
-          <button style={ghostBtn} onClick={() => { v.lock(); setSelected(null); setActive("editor"); }}>Bloquear</button>
+      <MenuBar menus={menus} />
+
+      <div style={toolbar}>
+        <strong style={{ fontSize: 14, letterSpacing: 0.3 }}>Remota</strong>
+        <div style={{ width: 1, height: 18, background: colors.border, margin: "0 6px" }} />
+        <button style={toolBtn} onClick={newConnection}>+ Conexão</button>
+        <button style={toolBtn} onClick={newFolder}>+ Pasta</button>
+        <button style={toolBtn} onClick={lock}>Bloquear</button>
+      </div>
+
+      {notice && (
+        <div style={banner}>
+          <span style={{ fontSize: 13 }}>{notice}</span>
+          <button onClick={() => setNotice(null)} style={{ ...toolBtn, marginLeft: "auto" }}>×</button>
         </div>
-      </header>
+      )}
 
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <aside style={sidebar}>
+          <div style={sidebarHead}>Conexões</div>
           <ConnectionTree
             doc={v.tree}
             selectedId={selected?.id ?? null}
-            onSelect={(n) => { setSelected(n); setActive("editor"); }}
+            onSelect={selectNode}
             onOpen={(n) => { if (n.type === "connection") openConn(n.id); }}
-            onDelete={(id) => { v.remove(id); if (selected?.id === id) setSelected(null); }}
+            onDelete={(id) => { v.remove(id); if (selected?.id === id) setEditing({ kind: "connection", node: null, parentId: null }); }}
           />
         </aside>
 
@@ -73,11 +135,13 @@ export default function App() {
             onDuplicate={async (id) => { const nid = await s.duplicate(id); if (nid) setActive(nid); }}
           />
           <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-            {/* Editor (montado sempre; visível só na aba "editor") */}
             <div style={{ ...pane, overflow: "auto", display: active === "editor" ? "block" : "none" }}>
-              <ConnectionEditor node={selected} onSave={async (n) => { await v.save(null, n); setSelected(n); }} />
+              {editing.kind === "folder" ? (
+                <FolderEditor node={editing.node} onSave={saveNode} />
+              ) : (
+                <ConnectionEditor node={editing.node} onSave={saveNode} onConnect={openConn} />
+              )}
             </div>
-            {/* Sessões: todas montadas (mantêm a ligação viva), visível só a ativa */}
             {s.tabs.map((t) => (
               <div key={t.id} style={{ ...pane, display: active === t.id ? "block" : "none" }}>
                 <SessionView tab={t} />
@@ -86,8 +150,20 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      <footer style={statusbar}>
+        <span style={{ color: "#7ee787" }}>● cofre destravado</span>
+        <Sep />
+        <span>gateway 127.0.0.1 (local)</span>
+        <Sep />
+        <span>{s.tabs.length} {s.tabs.length === 1 ? "sessão aberta" : "sessões abertas"}</span>
+      </footer>
     </div>
   );
+}
+
+function Sep() {
+  return <span style={{ color: colors.border }}>│</span>;
 }
 
 function Center({ children }: { children: ReactNode }) {
@@ -106,12 +182,49 @@ const shell: CSSProperties = {
   color: colors.text,
   fontFamily: "system-ui, sans-serif",
 };
-const headerStyle: CSSProperties = {
+const toolbar: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 12,
-  padding: "10px 14px",
+  gap: 6,
+  padding: "6px 10px",
+  borderBottom: `1px solid ${colors.border}`,
+  background: "#12141a",
+};
+const toolBtn: CSSProperties = {
+  background: "transparent",
+  color: colors.dim,
+  border: `1px solid ${colors.border}`,
+  borderRadius: 6,
+  padding: "4px 10px",
+  fontSize: 12,
+  cursor: "pointer",
+};
+const banner: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "8px 12px",
+  background: "#1b2330",
+  borderBottom: `1px solid ${colors.border}`,
+  color: colors.text,
+};
+const sidebar: CSSProperties = { width: 320, borderRight: `1px solid ${colors.border}`, overflow: "auto", display: "flex", flexDirection: "column" };
+const sidebarHead: CSSProperties = {
+  padding: "8px 12px",
+  fontSize: 11,
+  textTransform: "uppercase",
+  letterSpacing: 0.6,
+  color: colors.dim,
   borderBottom: `1px solid ${colors.border}`,
 };
-const sidebar: CSSProperties = { width: 340, borderRight: `1px solid ${colors.border}`, overflow: "auto" };
 const pane: CSSProperties = { position: "absolute", inset: 0 };
+const statusbar: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "4px 12px",
+  borderTop: `1px solid ${colors.border}`,
+  background: "#12141a",
+  color: colors.dim,
+  fontSize: 12,
+};

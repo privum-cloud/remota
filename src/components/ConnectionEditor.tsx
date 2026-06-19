@@ -9,9 +9,10 @@ const DEFAULT_PORT: Record<Protocol, number> = { ssh: 22, rdp: 3389, vnc: 5900, 
 type Props = {
   node: Node | null;
   onSave: (node: Node) => Promise<void>;
+  onConnect?: (id: string) => void;
 };
 
-export function ConnectionEditor({ node, onSave }: Props) {
+export function ConnectionEditor({ node, onSave, onConnect }: Props) {
   const editingId = node?.type === "connection" ? node.id : null;
   const [name, setName] = useState("");
   const [protocol, setProtocol] = useState<Protocol>("ssh");
@@ -119,10 +120,20 @@ export function ConnectionEditor({ node, onSave }: Props) {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button type="submit" disabled={busy || !name || !host} style={{ ...primaryBtn, opacity: busy || !name || !host ? 0.6 : 1 }}>
           {busy ? "…" : "Guardar"}
         </button>
+        {editingId && onConnect && (
+          <button
+            type="button"
+            onClick={() => onConnect(editingId)}
+            style={{ ...primaryBtn, background: "#2ea043" }}
+            title="Abrir sessão (igual ao duplo-clique na árvore)"
+          >
+            Conectar ▸
+          </button>
+        )}
         {saved && <span style={{ color: "#7ee787", fontSize: 12 }}>Guardado ✓</span>}
       </div>
     </form>
