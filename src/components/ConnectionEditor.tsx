@@ -25,6 +25,8 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
   const [domain, setDomain] = useState("");
   const [keyPath, setKeyPath] = useState("");
   const [gw, setGw] = useState<GwForm>(emptyGw);
+  const [relayUrl, setRelayUrl] = useState("");
+  const [relayAgentId, setRelayAgentId] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -39,6 +41,8 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
     setDomain(e?.conn.credentials.domain ?? "");
     setKeyPath(e?.conn.credentials.key_path ?? "");
     setGw(gwFromModel(e?.conn.gateway));
+    setRelayUrl(e?.conn.relay?.url ?? "");
+    setRelayAgentId(e?.conn.relay?.agent_id ?? "");
     setSaved(false);
   }, [node]);
 
@@ -62,6 +66,10 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
             key_path: keyPath || undefined,
           },
           gateway: gwToModel(gw),
+          relay:
+            relayUrl.trim() && relayAgentId.trim()
+              ? { url: relayUrl.trim(), agent_id: relayAgentId.trim() }
+              : undefined,
         },
       };
       await onSave(built);
@@ -138,6 +146,28 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
       </div>
 
       <GatewaySection value={gw} onChange={setGw} />
+
+      <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 12 }}>
+        <div style={{ ...label, marginBottom: 8 }}>Relay (NAT traversal, optional)</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input
+            style={input}
+            value={relayUrl}
+            onChange={(e) => setRelayUrl(e.target.value)}
+            placeholder="relay URL (e.g. wss://relay.privum.cloud)"
+          />
+          <input
+            style={input}
+            value={relayAgentId}
+            onChange={(e) => setRelayAgentId(e.target.value)}
+            placeholder="agent id (registered on the relay)"
+          />
+        </div>
+        <div style={{ fontSize: 11, color: "#8b949e", marginTop: 6 }}>
+          Set both to reach this host through the agent (behind NAT). Host above is the target as
+          the agent sees it — use 127.0.0.1 for the agent machine itself.
+        </div>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button type="submit" disabled={busy || !name || !host} style={{ ...primaryBtn, opacity: busy || !name || !host ? 0.6 : 1 }}>

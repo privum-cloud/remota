@@ -151,6 +151,7 @@ mod tests {
                 port: None,
                 credentials: Credentials::default(),
                 gateway: None,
+                relay: None,
             },
         }
     }

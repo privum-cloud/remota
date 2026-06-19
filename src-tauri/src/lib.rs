@@ -17,6 +17,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // CryptoProvider (ring) para o rustls 0.23 — usado pelas conexões "relayed" (wss).
+            gateway::relay::ensure_crypto_provider();
             let registry = Arc::new(SessionRegistry::new());
             let reg = registry.clone();
             // Inicia o gateway local (127.0.0.1:0) e captura a porta antes de seguir.

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Gateway, Protocol } from "../lib/vaultApi";
+import type { Gateway, Protocol, Relay } from "../lib/vaultApi";
 
 type SessionInfo = { wsUrl: string; kind: string };
 
@@ -14,6 +14,7 @@ export interface SessionTab {
   keyPath?: string; // chave privada SSH (path), guardado p/ reconnect
   domain?: string; // domínio (RDP/NLA), usado pelo renderizador
   gateway?: Gateway; // jump host (SSH ProxyJump), guardado p/ reconnect
+  relay?: Relay; // relay self-hosted (NAT traversal), guardado p/ reconnect
   wsUrl: string;
   epoch: number; // incrementa no reconnect para forçar remount do renderizador
   error?: string;
@@ -29,6 +30,7 @@ export interface OpenOpts {
   keyPath?: string;
   domain?: string;
   gateway?: Gateway;
+  relay?: Relay;
 }
 
 const DEFAULT_PORT: Record<Protocol, number> = { ssh: 22, rdp: 3389, vnc: 5900, telnet: 23 };
@@ -40,9 +42,10 @@ async function openGateway(
   password?: string,
   keyPath?: string,
   gateway?: Gateway,
+  relay?: Relay,
 ): Promise<{ wsUrl: string; error?: string }> {
   try {
-    // SSH: o gateway usa user/pass ou chave (russh) + gateway (jump host); VNC/raw ignoram.
+    // SSH: o gateway usa user/pass ou chave (russh) + gateway (jump host) OU relay (NAT); VNC/raw ignoram.
     const info = await invoke<SessionInfo>("open_session", {
       target,
       kind: protocol,
@@ -50,6 +53,7 @@ async function openGateway(
       password,
       keyPath,
       gateway,
+      relay,
     });
     return { wsUrl: info.wsUrl };
   } catch (e) {
@@ -66,7 +70,7 @@ export function useSessions() {
     const port = opts.port ?? DEFAULT_PORT[opts.protocol];
     const target = `${opts.host}:${port}`;
     const id = crypto.randomUUID();
-    const { wsUrl, error } = await openGateway(target, opts.protocol, opts.username, opts.password, opts.keyPath, opts.gateway);
+    const { wsUrl, error } = await openGateway(target, opts.protocol, opts.username, opts.password, opts.keyPath, opts.gateway, opts.relay);
     setTabs((t) => [
       ...t,
       {
@@ -79,6 +83,7 @@ export function useSessions() {
         keyPath: opts.keyPath,
         domain: opts.domain,
         gateway: opts.gateway,
+        relay: opts.relay,
         wsUrl,
         epoch: 0,
         error,
@@ -94,7 +99,7 @@ export function useSessions() {
   const reconnect = useCallback(async (id: string) => {
     const tab = tabsRef.current.find((x) => x.id === id);
     if (!tab) return;
-    const { wsUrl, error } = await openGateway(tab.target, tab.protocol, tab.username, tab.password, tab.keyPath, tab.gateway);
+    const { wsUrl, error } = await openGateway(tab.target, tab.protocol, tab.username, tab.password, tab.keyPath, tab.gateway, tab.relay);
     setTabs((t) => t.map((x) => (x.id === id ? { ...x, wsUrl, error, epoch: x.epoch + 1 } : x)));
   }, []);
 
@@ -113,6 +118,7 @@ export function useSessions() {
         keyPath: tab.keyPath,
         domain: tab.domain,
         gateway: tab.gateway,
+        relay: tab.relay,
       });
     },
     [openSession],

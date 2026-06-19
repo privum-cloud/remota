@@ -41,7 +41,12 @@ async fn run(
     // O jump (se houver) tem de ficar vivo durante toda a sessão, senão o túnel fecha.
     let mut _jump_keepalive: Option<client::Handle<crate::gateway::tunnel::AcceptAllHandler>> = None;
 
-    let mut handle = if let Some(gw) = &spec.gateway {
+    let mut handle = if let Some(relay) = &spec.relay {
+        // Relay self-hosted (NAT traversal): SSH sobre o túnel wss até ao agente, que liga ao sshd do alvo.
+        let (thost, tport) = split_host_port(&spec.target);
+        let stream = crate::gateway::relay::connect_relay(relay, &thost, tport).await?;
+        client::connect_stream(config.clone(), stream, ClientHandler).await?
+    } else if let Some(gw) = &spec.gateway {
         // SSH ao jump host (password OU chave) → túnel direct-tcpip → SSH sobre esse stream.
         let jump = crate::gateway::tunnel::connect_jump(gw).await?;
         let (thost, tport) = split_host_port(&spec.target);

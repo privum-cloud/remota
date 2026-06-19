@@ -73,6 +73,7 @@ export default function App() {
       keyPath: eff.key_path,
       domain: eff.domain,
       gateway: gw,
+      relay: found.node.conn.relay,
     });
     setActive(newId);
   }

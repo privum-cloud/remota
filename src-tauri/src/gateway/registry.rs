@@ -22,6 +22,8 @@ pub struct SessionSpec {
     pub key_path: Option<String>,
     /// Jump host (SSH ProxyJump): se presente, liga ao destino tunelado por ele.
     pub gateway: Option<crate::model::Gateway>,
+    /// Relay self-hosted (NAT traversal): se presente, liga ao destino pelo túnel do relay.
+    pub relay: Option<crate::model::Relay>,
 }
 
 #[derive(Default)]
@@ -35,7 +37,7 @@ impl SessionRegistry {
     }
 
     pub fn create(&self, target: String, kind: SessionKind) -> SessionSpec {
-        self.create_with_creds(target, kind, None, None, None, None)
+        self.create_with_creds(target, kind, None, None, None, None, None)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -47,6 +49,7 @@ impl SessionRegistry {
         password: Option<String>,
         key_path: Option<String>,
         gateway: Option<crate::model::Gateway>,
+        relay: Option<crate::model::Relay>,
     ) -> SessionSpec {
         let spec = SessionSpec {
             id: Uuid::new_v4().to_string(),
@@ -57,6 +60,7 @@ impl SessionRegistry {
             password,
             key_path,
             gateway,
+            relay,
         };
         self.sessions
             .lock()

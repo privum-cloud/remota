@@ -24,6 +24,16 @@ pub struct Credentials {
     pub key_path: Option<String>,
 }
 
+/// Relay self-hosted (remota-relay): liga ao destino através de um agente atrás de NAT.
+/// Se presente numa conexão, o gateway usa o túnel wss do relay em vez de TCP direto.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Relay {
+    /// URL base do relay, ex. `wss://relay.privum.cloud`.
+    pub url: String,
+    /// Id do agente alvo (registado no relay).
+    pub agent_id: String,
+}
+
 /// Jump host (SSH ProxyJump): liga ao destino TUNELADO através deste host.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Gateway {
@@ -48,6 +58,9 @@ pub struct Connection {
     pub credentials: Credentials,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gateway: Option<Gateway>,
+    /// Relay self-hosted (NAT traversal). Se presente, a sessão vai pelo túnel do relay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay: Option<Relay>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -137,6 +150,7 @@ mod tests {
             port: None,
             credentials: Credentials::default(),
             gateway: None,
+            relay: None,
         }
     }
 

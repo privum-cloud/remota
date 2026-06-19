@@ -1,4 +1,5 @@
 pub mod registry;
+pub mod relay;
 pub mod server;
 pub mod ssh;
 pub mod tunnel;

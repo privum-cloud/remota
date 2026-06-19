@@ -19,12 +19,19 @@ export interface Gateway {
   key_path?: string;
 }
 
+/** Relay self-hosted (NAT traversal): liga ao destino via um agente atrás de NAT. */
+export interface Relay {
+  url: string; // wss://relay.privum.cloud
+  agent_id: string;
+}
+
 export interface Connection {
   protocol: Protocol;
   host: string;
   port?: number;
   credentials: Credentials;
   gateway?: Gateway;
+  relay?: Relay;
 }
 
 // Enum internamente-tageado (#[serde(tag = "type")]) do Rust.
