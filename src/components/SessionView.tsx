@@ -1,6 +1,7 @@
 import type { SessionTab } from "../state/useSessions";
 import { VncView } from "../renderers/VncView";
 import { SshView } from "../renderers/SshView";
+import { RdpView } from "../renderers/RdpView";
 import { colors } from "./styles";
 
 export function SessionView({ tab }: { tab: SessionTab }) {
@@ -21,6 +22,26 @@ export function SessionView({ tab }: { tab: SessionTab }) {
 
   if (tab.protocol === "ssh") {
     return <SshView key={tab.epoch} wsUrl={tab.wsUrl} />;
+  }
+
+  if (tab.protocol === "rdp") {
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "6px 10px", fontSize: 12, color: colors.dim, background: "#1b2330", borderBottom: `1px solid ${colors.border}` }}>
+          RDP: renderizador ironrdp-web ligado. Falta o proxy RDCleanPath no gateway (spike T6 — validar contra Windows NLA).
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <RdpView
+            key={tab.epoch}
+            proxyUrl={tab.wsUrl}
+            destination={tab.target}
+            username={tab.username ?? ""}
+            password={tab.password ?? ""}
+            domain={tab.domain}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (

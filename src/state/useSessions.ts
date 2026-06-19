@@ -11,6 +11,7 @@ export interface SessionTab {
   target: string; // host:port
   username?: string; // guardado p/ reconnect (gateway re-autentica SSH)
   password?: string;
+  domain?: string; // domínio (RDP/NLA), usado pelo renderizador
   gateway?: Gateway; // jump host (SSH ProxyJump), guardado p/ reconnect
   wsUrl: string;
   epoch: number; // incrementa no reconnect para forçar remount do renderizador
@@ -24,6 +25,7 @@ export interface OpenOpts {
   port?: number;
   username?: string;
   password?: string;
+  domain?: string;
   gateway?: Gateway;
 }
 
@@ -70,6 +72,7 @@ export function useSessions() {
         target,
         username: opts.username,
         password: opts.password,
+        domain: opts.domain,
         gateway: opts.gateway,
         wsUrl,
         epoch: 0,
@@ -102,6 +105,7 @@ export function useSessions() {
         port: Number(tab.target.slice(i + 1)),
         username: tab.username,
         password: tab.password,
+        domain: tab.domain,
         gateway: tab.gateway,
       });
     },
