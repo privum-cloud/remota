@@ -1,0 +1,25 @@
+# Remota relay — TLS termination + WebSocket reverse proxy.
+# Caddy obtains/renews a Let's Encrypt cert automatically and proxies the
+# control (/agent/control) and data (/data/{id}) WebSocket upgrades transparently.
+#
+# Place at /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
+# DNS: point relay.privum.cloud (A/AAAA) at this host; open TCP 80 + 443.
+
+relay.privum.cloud {
+	encode zstd gzip
+
+	# The agent connects to wss://relay.privum.cloud/agent/control
+	# The app connects to  wss://relay.privum.cloud/data/{id}?token=...&role=client
+	reverse_proxy 127.0.0.1:8787
+
+	# --- MVP security note -------------------------------------------------
+	# POST /session and GET /agents are currently UNAUTHENTICATED: anyone who can
+	# reach this host can broker a tunnel to a registered agent's target_port.
+	# Until per-user auth lands (Phase 3), restrict who can reach the relay, e.g.
+	# only the team VPN / office IPs:
+	#
+	#   @notvpn not remote_ip 10.10.0.0/24 <your-office-cidr>
+	#   respond @notvpn 403
+	#
+	# (Agents still need outbound reach; this only gates inbound brokering.)
+}

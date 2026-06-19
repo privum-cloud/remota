@@ -1,0 +1,35 @@
+[Unit]
+Description=Remota relay (self-hosted remote-access broker)
+Documentation=https://github.com/privum/remota
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=remota
+Group=remota
+# Token + listen address live here (0640, owned by remota). See relay.env.example.
+EnvironmentFile=/etc/remota/relay.env
+ExecStart=/usr/local/bin/remota-relay
+Restart=on-failure
+RestartSec=2
+
+# --- hardening (relay needs only outbound/loopback TCP, no fs writes) ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
