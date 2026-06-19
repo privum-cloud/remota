@@ -163,6 +163,11 @@ export default function App() {
   return (
     <div style={shell}>
       <MenuBar menus={menus} />
+      <div className="tricolore">
+        <span style={{ background: "#009246" }} />
+        <span style={{ background: "#f4f4f4" }} />
+        <span style={{ background: "#ce2b37" }} />
+      </div>
 
       <div style={toolbar}>
         <strong style={{ fontSize: 14, letterSpacing: 0.3 }}>Remota</strong>

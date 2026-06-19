@@ -162,6 +162,7 @@ function TreeNode({
     return (
       <div>
         <div
+          className="tree-row"
           draggable
           onDragStart={(e) => { e.stopPropagation(); dnd.onStart(node.id); }}
           onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dnd.onOver(node.id); }}
@@ -208,6 +209,7 @@ function TreeNode({
   const selected = node.id === selectedId;
   return (
     <div
+      className="tree-row"
       draggable
       onDragStart={(e) => { e.stopPropagation(); dnd.onStart(node.id); }}
       onClick={() => onSelect(node)}
@@ -254,8 +256,9 @@ function rowStyle(selected: boolean) {
     padding: "6px 8px",
     borderRadius: 6,
     fontSize: 13,
-    background: selected ? "#1f2530" : "transparent",
     color: colors.text,
+    // Sem background quando não-selecionado, para o `.tree-row:hover` do CSS funcionar.
+    ...(selected ? { background: "#1f2530" } : {}),
   } as const;
 }
 

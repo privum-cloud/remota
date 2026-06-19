@@ -1,0 +1,83 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --border: #262a33;
+  --text: #e6e6e6;
+  --dim: #9aa0aa;
+  --accent: #4f8cff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* transições suaves nos controlos */
+button,
+input,
+select {
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease, filter 0.12s ease;
+}
+button:hover:not(:disabled) {
+  filter: brightness(1.14);
+}
+button:active:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+/* linhas da árvore com hover */
+.tree-row {
+  transition: background 0.1s ease;
+}
+.tree-row:hover {
+  background: #1a1f29;
+}
+
+/* faixa tricolore (acento italiano) */
+.tricolore {
+  display: flex;
+  height: 3px;
+  flex: 0 0 auto;
+}
+.tricolore > span {
+  flex: 1;
+}
+
+/* scrollbars escuras e finas */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2b3340;
+  border-radius: 6px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4452;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* foco dos inputs */
+input:focus,
+select:focus {
+  border-color: var(--accent) !important;
+}
+
+/* seleção de texto */
+::selection {
+  background: rgba(79, 140, 255, 0.35);
+}
