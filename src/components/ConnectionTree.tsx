@@ -22,10 +22,11 @@ type Props = {
   doc: Document;
   selectedId: string | null;
   onSelect: (node: Node) => void;
+  onOpen: (node: Node) => void;
   onDelete: (id: string) => void;
 };
 
-export function ConnectionTree({ doc, selectedId, onSelect, onDelete }: Props) {
+export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete }: Props) {
   if (doc.nodes.length === 0) {
     return <div style={{ padding: 16, color: colors.dim, fontSize: 13 }}>Sem conexões ainda — cria a primeira →</div>;
   }
@@ -39,6 +40,7 @@ export function ConnectionTree({ doc, selectedId, onSelect, onDelete }: Props) {
           chain={[]}
           selectedId={selectedId}
           onSelect={onSelect}
+          onOpen={onOpen}
           onDelete={onDelete}
         />
       ))}
@@ -52,6 +54,7 @@ function TreeNode({
   chain,
   selectedId,
   onSelect,
+  onOpen,
   onDelete,
 }: {
   node: Node;
@@ -59,6 +62,7 @@ function TreeNode({
   chain: Credentials[];
   selectedId: string | null;
   onSelect: (node: Node) => void;
+  onOpen: (node: Node) => void;
   onDelete: (id: string) => void;
 }) {
   const pad = 8 + depth * 14;
@@ -78,6 +82,7 @@ function TreeNode({
             chain={[...chain, node.defaults]}
             selectedId={selectedId}
             onSelect={onSelect}
+            onOpen={onOpen}
             onDelete={onDelete}
           />
         ))}
@@ -90,6 +95,8 @@ function TreeNode({
   return (
     <div
       onClick={() => onSelect(node)}
+      onDoubleClick={() => onOpen(node)}
+      title="Duplo-clique para abrir"
       style={{ ...rowStyle(selected), paddingLeft: pad, cursor: "pointer" }}
     >
       <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
