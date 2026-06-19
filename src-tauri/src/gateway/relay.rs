@@ -297,4 +297,54 @@ mod tests {
         println!("relay banner: {banner:?}");
         assert!(banner.starts_with("SSH-2.0-"), "expected SSH banner, got {banner:?}");
     }
+
+    /// Prova o caminho BIDIRECIONAL + auth + canal: SSH completo via russh sobre o
+    /// `connect_relay` (KEX precisa de escrita, que o teste do banner não exercita). Correr:
+    ///   RELAY_URL=wss://relay.privum.cloud AGENT_ID=vmlinuxdev SSH_USER=sysadmin \
+    ///   SSH_KEY=/home/sysadmin/.ssh/id_rsa \
+    ///     cargo test -p remota relay::tests::ssh_exec_over_relay -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn ssh_exec_over_relay() {
+        use russh::client::{self, Config};
+        use russh::ChannelMsg;
+
+        let url = std::env::var("RELAY_URL").expect("RELAY_URL");
+        let agent_id = std::env::var("AGENT_ID").expect("AGENT_ID");
+        let host = std::env::var("TARGET_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+        let port: u16 = std::env::var("TARGET_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(22);
+        let user = std::env::var("SSH_USER").unwrap_or_else(|_| "sysadmin".into());
+        let key_path = std::env::var("SSH_KEY")
+            .unwrap_or_else(|_| format!("{}/.ssh/id_rsa", std::env::var("HOME").unwrap()));
+
+        let relay = Relay { url, agent_id };
+        let stream = connect_relay(&relay, &host, port).await.expect("connect_relay");
+
+        let config = Arc::new(Config::default());
+        let mut handle =
+            client::connect_stream(config, stream, crate::gateway::tunnel::AcceptAllHandler)
+                .await
+                .expect("ssh connect_stream over relay");
+        let key = russh::keys::load_secret_key(&key_path, None).expect("load ssh key");
+        let authed = handle
+            .authenticate_publickey(user, Arc::new(key))
+            .await
+            .expect("auth call");
+        assert!(authed, "publickey auth failed (is the key in authorized_keys?)");
+
+        let mut channel = handle.channel_open_session().await.expect("open session");
+        channel.exec(true, "echo remota-ok").await.expect("exec");
+
+        let mut out = Vec::new();
+        loop {
+            match channel.wait().await {
+                Some(ChannelMsg::Data { data }) => out.extend_from_slice(&data),
+                Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+                _ => {}
+            }
+        }
+        let text = String::from_utf8_lossy(&out);
+        println!("exec output: {text:?}");
+        assert!(text.contains("remota-ok"), "expected 'remota-ok', got {text:?}");
+    }
 }

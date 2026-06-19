@@ -164,8 +164,8 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
           />
         </div>
         <div style={{ fontSize: 11, color: "#8b949e", marginTop: 6 }}>
-          Set both to reach this host through the agent (behind NAT). Host above is the target as
-          the agent sees it — use 127.0.0.1 for the agent machine itself.
+          SSH only for now. Set both to reach this host through the agent (behind NAT). Host above
+          is the target as the agent sees it — use 127.0.0.1 for the agent machine itself.
         </div>
       </div>
 
