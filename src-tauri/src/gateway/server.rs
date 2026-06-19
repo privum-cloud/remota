@@ -14,7 +14,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::gateway::{SessionKind, SessionRegistry, SessionSpec};
+use crate::gateway::{SessionRegistry, SessionSpec};
 
 #[derive(Deserialize)]
 struct TokenQuery {
@@ -65,12 +65,13 @@ async fn ssh_handler(
 }
 
 async fn bridge_raw_tcp(socket: WebSocket, spec: SessionSpec) {
-    debug_assert_eq!(spec.kind, SessionKind::RawTcp);
-    let tcp = match tokio::net::TcpStream::connect(&spec.target).await {
-        Ok(s) => s,
+    // Direto, ou tunelado por um jump host (SSH direct-tcpip) se a sessão tiver gateway.
+    // `_jump` mantém o túnel vivo durante a sessão.
+    let (stream, _jump) = match crate::gateway::tunnel::connect_target(&spec.target, &spec.gateway).await {
+        Ok(x) => x,
         Err(_) => return,
     };
-    let (mut tcp_r, mut tcp_w) = tcp.into_split();
+    let (mut tcp_r, mut tcp_w) = tokio::io::split(stream);
     let (mut ws_tx, mut ws_rx) = socket.split();
 
     let ws_to_tcp = async {
