@@ -1,7 +1,22 @@
-import { type MouseEvent, useState } from "react";
+import { type CSSProperties, type MouseEvent, useState } from "react";
 import type { Connection, Credentials, Document, Node } from "../lib/vaultApi";
 import { ContextMenu, type CtxItem } from "./ContextMenu";
 import { colors } from "./styles";
+
+/** Todos os ids de pasta na árvore (para expand/collapse all). */
+function allFolderIds(nodes: Node[]): string[] {
+  const out: string[] = [];
+  const walk = (ns: Node[]) => {
+    for (const n of ns) {
+      if (n.type === "folder") {
+        out.push(n.id);
+        walk(n.children);
+      }
+    }
+  };
+  walk(nodes);
+  return out;
+}
 
 const protoColor: Record<string, string> = {
   ssh: "#7ee787",
@@ -67,6 +82,10 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
     });
   }
 
+  const collapseAll = () => setCollapsed(new Set(allFolderIds(doc.nodes)));
+  const expandAll = () => setCollapsed(new Set());
+  const hasFolders = doc.nodes.some((n) => n.type === "folder");
+
   function itemsFor(node: Node | null): CtxItem[] {
     if (!node) {
       return [
@@ -104,6 +123,12 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
       onDrop={(e) => { e.preventDefault(); dnd.onDrop(null); }}
       style={{ padding: 6, minHeight: "100%", outline: dropTarget === "root" ? `2px dashed ${colors.accent}` : "none", outlineOffset: -2 }}
     >
+      {hasFolders && (
+        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", padding: "0 2px 6px" }}>
+          <button type="button" style={miniBtn} onClick={expandAll} title="Expand all folders">Expand all</button>
+          <button type="button" style={miniBtn} onClick={collapseAll} title="Collapse all folders">Collapse all</button>
+        </div>
+      )}
       {doc.nodes.length === 0 ? (
         <div style={{ padding: 12, color: colors.dim, fontSize: 13 }}>Empty — right-click here to create.</div>
       ) : (
@@ -261,6 +286,16 @@ function rowStyle(selected: boolean) {
     ...(selected ? { background: "#1f2530" } : {}),
   } as const;
 }
+
+const miniBtn: CSSProperties = {
+  background: "transparent",
+  color: colors.dim,
+  border: `1px solid ${colors.border}`,
+  borderRadius: 5,
+  padding: "2px 7px",
+  fontSize: 11,
+  cursor: "pointer",
+};
 
 function DeleteBtn({ onClick }: { onClick: (e: MouseEvent) => void }) {
   return (
