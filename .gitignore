@@ -22,3 +22,23 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Internal working docs (superpowers specs/plans/notes) — not for the repo
+docs/superpowers/
+
+# Secrets / credentials / sensitive data — never commit
+*.env
+.env
+.env.*
+!*.env.example
+*.key
+*.pem
+*.pfx
+*.p12
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.secret
+secrets/
+connections.dat
