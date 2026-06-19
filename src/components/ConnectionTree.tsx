@@ -100,7 +100,7 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
   return (
     <div
       onContextMenu={(e) => openMenu(e, null)}
-      onDragOver={(e) => { e.preventDefault(); setDropTarget("root"); }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropTarget("root"); }}
       onDrop={(e) => { e.preventDefault(); dnd.onDrop(null); }}
       style={{ padding: 6, minHeight: "100%", outline: dropTarget === "root" ? `2px dashed ${colors.accent}` : "none", outlineOffset: -2 }}
     >
@@ -164,8 +164,8 @@ function TreeNode({
         <div
           className="tree-row"
           draggable
-          onDragStart={(e) => { e.stopPropagation(); dnd.onStart(node.id); }}
-          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dnd.onOver(node.id); }}
+          onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData("text/plain", node.id); e.dataTransfer.effectAllowed = "move"; dnd.onStart(node.id); }}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; dnd.onOver(node.id); }}
           onDragLeave={() => dnd.onLeave()}
           onDrop={(e) => { e.preventDefault(); e.stopPropagation(); dnd.onDrop(node.id); }}
           onClick={() => onSelect(node)}
@@ -211,7 +211,7 @@ function TreeNode({
     <div
       className="tree-row"
       draggable
-      onDragStart={(e) => { e.stopPropagation(); dnd.onStart(node.id); }}
+      onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData("text/plain", node.id); e.dataTransfer.effectAllowed = "move"; dnd.onStart(node.id); }}
       onClick={() => onSelect(node)}
       onDoubleClick={() => onOpen(node)}
       onContextMenu={(e) => onContext(e, node)}
