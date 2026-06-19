@@ -31,6 +31,11 @@ pub struct AgentConfig {
 
 /// Connect, register, then service `OpenChannel` requests until the control socket closes.
 pub async fn run_agent(cfg: AgentConfig) -> Result<()> {
+    // rustls 0.23 requires a process-default CryptoProvider before any TLS. Install ring
+    // explicitly so wss:// works deterministically regardless of feature unification.
+    // Idempotent: ignore the error if another caller already installed one.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let base = cfg.relay_base.trim_end_matches('/').to_string();
     let control_url = format!("{base}/agent/control");
 

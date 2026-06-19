@@ -11,6 +11,9 @@ tokio = { version = "1", features = ["full"] }
 # rustls + bundled webpki roots so the agent speaks wss:// to the relay (via Caddy/LE)
 # without depending on system OpenSSL or the host cert store.
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+# rustls 0.23 needs an explicit process-default CryptoProvider; pin ring (pure-Rust-ish,
+# musl-friendly, no aws-lc-rs C toolchain) and install it at startup (see lib.rs).
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 futures-util = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
