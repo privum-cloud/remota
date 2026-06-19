@@ -42,7 +42,7 @@ pub async fn connect_jump(gw: &Gateway) -> Result<Handle<AcceptAllHandler>, BoxE
         )
         .await?;
     if !ok {
-        return Err("autenticação no jump host falhou".into());
+        return Err("jump host authentication failed".into());
     }
     Ok(jump)
 }

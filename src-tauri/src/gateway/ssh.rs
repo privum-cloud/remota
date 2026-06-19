@@ -52,7 +52,7 @@ async fn run(
             )
             .await?;
         if !ok {
-            return Err("autenticação no jump host falhou".into());
+            return Err("jump host authentication failed".into());
         }
         let (thost, tport) = split_host_port(&spec.target);
         let channel = jump
@@ -67,7 +67,7 @@ async fn run(
 
     let authed = handle.authenticate_password(username, password).await?;
     if !authed {
-        return Err("autenticação SSH falhou (utilizador/senha)".into());
+        return Err("SSH authentication failed (username/password)".into());
     }
 
     let mut channel = handle.channel_open_session().await?;

@@ -9,7 +9,7 @@ export function SessionView({ tab }: { tab: SessionTab }) {
     return (
       <div style={{ padding: 20 }}>
         <span style={{ color: colors.danger, fontFamily: "monospace", fontSize: 12 }}>
-          Falha ao abrir a sessão: {tab.error}
+          Failed to open session: {tab.error}
         </span>
       </div>
     );
@@ -28,7 +28,7 @@ export function SessionView({ tab }: { tab: SessionTab }) {
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "6px 10px", fontSize: 12, color: colors.dim, background: "#1b2330", borderBottom: `1px solid ${colors.border}` }}>
-          RDP: renderizador ironrdp-web ligado. Falta o proxy RDCleanPath no gateway (spike T6 — validar contra Windows NLA).
+          RDP: ironrdp-web renderer wired. RDCleanPath proxy on the gateway is still pending (spike T6 — validate against Windows NLA).
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
           <RdpView
@@ -47,11 +47,10 @@ export function SessionView({ tab }: { tab: SessionTab }) {
   return (
     <div style={{ padding: 20 }}>
       <p style={{ color: colors.text, fontSize: 14, margin: "0 0 8px" }}>
-        Sessão <b>{tab.protocol.toUpperCase()}</b> aberta no gateway ✓
+        <b>{tab.protocol.toUpperCase()}</b> session open on the gateway ✓
       </p>
       <p style={{ color: colors.dim, fontSize: 13, margin: "0 0 10px", maxWidth: 460 }}>
-        O renderizador na UI chega a seguir — SSH/Telnet via xterm.js (M2) e RDP via ironrdp-web (spike M0/T6).
-        O transporte (gateway + token de sessão) já está a funcionar.
+        The in-UI renderer is coming — Telnet via xterm.js. The transport (gateway + session token) already works.
       </p>
       <p style={{ color: colors.dim, fontFamily: "monospace", fontSize: 11 }}>
         {tab.target} · {tab.wsUrl}

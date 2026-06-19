@@ -31,7 +31,7 @@ export function TabBar({ tabs, activeId, onActivate, onClose, onReconnect, onDup
         >
           <span style={{ width: 7, height: 7, borderRadius: 4, flex: "0 0 auto", background: t.error ? colors.danger : protoColor[t.protocol] ?? colors.dim }} />
           <span style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-          <button onClick={(e) => { e.stopPropagation(); onClose(t.id); }} style={closeBtn} title="Fechar">
+          <button onClick={(e) => { e.stopPropagation(); onClose(t.id); }} style={closeBtn} title="Close">
             ×
           </button>
         </div>
@@ -43,8 +43,8 @@ export function TabBar({ tabs, activeId, onActivate, onClose, onReconnect, onDup
           onClose={() => setMenu(null)}
           items={[
             { label: "Reconnect", fn: () => onReconnect(menu.id) },
-            { label: "Duplicar aba", fn: () => onDuplicate(menu.id) },
-            { label: "Fechar", fn: () => onClose(menu.id) },
+            { label: "Duplicate tab", fn: () => onDuplicate(menu.id) },
+            { label: "Close", fn: () => onClose(menu.id) },
           ]}
         />
       )}

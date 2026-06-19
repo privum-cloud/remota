@@ -30,7 +30,7 @@ export function SshView({ wsUrl }: { wsUrl: string }) {
       if (typeof ev.data === "string") term.write(ev.data);
       else term.write(new Uint8Array(ev.data));
     };
-    ws.onclose = () => term.write("\r\n\x1b[90m[sessão terminada]\x1b[0m\r\n");
+    ws.onclose = () => term.write("\r\n\x1b[90m[session ended]\x1b[0m\r\n");
 
     const onData = term.onData((d) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(enc.encode(d));

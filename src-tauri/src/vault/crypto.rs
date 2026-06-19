@@ -34,11 +34,11 @@ impl std::fmt::Display for VaultError {
         match self {
             VaultError::Crypto => write!(
                 f,
-                "falha de cifra/decifra (senha errada ou dados corrompidos)"
+                "encryption/decryption failed (wrong password or corrupted data)"
             ),
-            VaultError::BadFormat => write!(f, "formato do arquivo de cofre inválido"),
-            VaultError::Locked => write!(f, "cofre bloqueado (faça unlock primeiro)"),
-            VaultError::Io(e) => write!(f, "erro de I/O: {e}"),
+            VaultError::BadFormat => write!(f, "invalid vault file format"),
+            VaultError::Locked => write!(f, "vault is locked (unlock first)"),
+            VaultError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
 }

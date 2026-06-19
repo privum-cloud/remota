@@ -29,14 +29,14 @@ export function GatewaySection({ value, onChange, hint }: { value: GwForm; onCha
     <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 12 }}>
       <div style={{ ...label, marginBottom: 6 }}>Gateway / Jump host (SSH)</div>
       <div style={{ color: colors.dim, fontSize: 11, marginBottom: 8 }}>
-        {hint ?? "Liga ao destino tunelado por este host (vazio = direto). Herdável pelas conexões dentro da pasta."}
+        {hint ?? "Connect to the target tunneled through this host (empty = direct). Inherited by connections in the folder."}
       </div>
       <div style={{ display: "flex", gap: 10 }}>
         <input
           style={input}
           value={value.host}
           onChange={(e) => set("host", e.target.value)}
-          placeholder="jump host (ex.: 192.168.1.242)"
+          placeholder="jump host (e.g. 192.168.1.242)"
         />
         <input
           style={{ ...input, width: 90 }}
@@ -46,8 +46,8 @@ export function GatewaySection({ value, onChange, hint }: { value: GwForm; onCha
         />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
-        <input style={input} value={value.username} onChange={(e) => set("username", e.target.value)} placeholder="utilizador do jump" />
-        <input style={input} type="password" value={value.password} onChange={(e) => set("password", e.target.value)} placeholder="senha do jump" />
+        <input style={input} value={value.username} onChange={(e) => set("username", e.target.value)} placeholder="jump username" />
+        <input style={input} type="password" value={value.password} onChange={(e) => set("password", e.target.value)} placeholder="jump password" />
       </div>
     </div>
   );

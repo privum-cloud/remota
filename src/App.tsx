@@ -24,7 +24,7 @@ export default function App() {
   const [active, setActive] = useState<string>("editor");
   const [notice, setNotice] = useState<string | null>(null);
 
-  if (v.status === "checking") return <Center>A verificar o cofre…</Center>;
+  if (v.status === "checking") return <Center>Checking vault…</Center>;
   if (v.status === "locked") return <VaultUnlock exists={v.exists} error={v.error} onUnlock={v.unlock} />;
 
   const selected = editing.node;
@@ -88,18 +88,18 @@ export default function App() {
       await v.refresh();
       setNotice(r.message);
     } catch (e) {
-      setNotice("Falha no import: " + String(e));
+      setNotice("Import failed: " + String(e));
     }
   }
 
   async function exportConnections() {
-    const path = await save({ defaultPath: "remota-conexoes.json", filters: [{ name: "JSON", extensions: ["json"] }] });
+    const path = await save({ defaultPath: "remota-connections.json", filters: [{ name: "JSON", extensions: ["json"] }] });
     if (typeof path !== "string") return;
     try {
       const r = await vaultApi.exportConnections(path);
       setNotice(r.message);
     } catch (e) {
-      setNotice("Falha no export: " + String(e));
+      setNotice("Export failed: " + String(e));
     }
   }
 
@@ -111,7 +111,7 @@ export default function App() {
       await v.refresh();
       setNotice(r.message);
     } catch (e) {
-      setNotice("Falha no import: " + String(e));
+      setNotice("Import failed: " + String(e));
     }
   }
 
@@ -120,9 +120,9 @@ export default function App() {
     const name = node?.name ?? "este item";
     const isFolder = node?.type === "folder";
     const msg = isFolder
-      ? `Apagar a pasta "${name}" e tudo o que está dentro? Esta ação não pode ser desfeita.`
-      : `Apagar a conexão "${name}"? Esta ação não pode ser desfeita.`;
-    const ok = await confirm(msg, { title: "Confirmar", kind: "warning", okLabel: "Apagar", cancelLabel: "Cancelar" });
+      ? `Delete the folder "${name}" and everything inside it? This cannot be undone.`
+      : `Delete the connection "${name}"? This cannot be undone.`;
+    const ok = await confirm(msg, { title: "Confirm", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" });
     if (!ok) return;
     await v.remove(id);
     if (selected?.id === id) setEditing({ kind: "connection", node: null, parentId: null });
@@ -130,22 +130,22 @@ export default function App() {
 
   const menus: Menu[] = [
     {
-      title: "Ficheiro",
+      title: "File",
       items: [
-        { label: "Nova conexão", onClick: newConnection },
-        { label: "Nova pasta", onClick: newFolder },
+        { label: "New connection", onClick: newConnection },
+        { label: "New folder", onClick: newFolder },
         "sep",
-        { label: "Importar do mRemoteNG (confCons.xml)…", onClick: importMremoteng },
-        { label: "Importar conexões (Remota JSON)…", onClick: importRemotaJson },
-        { label: "Exportar conexões (JSON)…", onClick: exportConnections },
+        { label: "Import from mRemoteNG (confCons.xml)…", onClick: importMremoteng },
+        { label: "Import connections (Remota JSON)…", onClick: importRemotaJson },
+        { label: "Export connections (JSON)…", onClick: exportConnections },
         "sep",
-        { label: "Bloquear cofre", onClick: lock },
+        { label: "Lock vault", onClick: lock },
       ],
     },
     {
-      title: "Ajuda",
+      title: "Help",
       items: [
-        { label: "Sobre o Remota", onClick: () => setNotice("Remota — gestor de conexões remotas multi-protocolo para Linux. Clean-room, AGPLv3.") },
+        { label: "About Remota", onClick: () => setNotice("Remota — multi-protocol remote connection manager for Linux. Clean-room, AGPLv3.") },
       ],
     },
   ];
@@ -157,9 +157,9 @@ export default function App() {
       <div style={toolbar}>
         <strong style={{ fontSize: 14, letterSpacing: 0.3 }}>Remota</strong>
         <div style={{ width: 1, height: 18, background: colors.border, margin: "0 6px" }} />
-        <button style={toolBtn} onClick={newConnection}>+ Conexão</button>
-        <button style={toolBtn} onClick={newFolder}>+ Pasta</button>
-        <button style={toolBtn} onClick={lock}>Bloquear</button>
+        <button style={toolBtn} onClick={newConnection}>+ Connection</button>
+        <button style={toolBtn} onClick={newFolder}>+ Folder</button>
+        <button style={toolBtn} onClick={lock}>Lock</button>
       </div>
 
       {notice && (
@@ -171,7 +171,7 @@ export default function App() {
 
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <aside style={sidebar}>
-          <div style={sidebarHead}>Conexões</div>
+          <div style={sidebarHead}>Connections</div>
           <ConnectionTree
             doc={v.tree}
             selectedId={selected?.id ?? null}
@@ -210,11 +210,11 @@ export default function App() {
       </div>
 
       <footer style={statusbar}>
-        <span style={{ color: "#7ee787" }}>● cofre destravado</span>
+        <span style={{ color: "#7ee787" }}>● vault unlocked</span>
         <Sep />
         <span>gateway 127.0.0.1 (local)</span>
         <Sep />
-        <span>{s.tabs.length} {s.tabs.length === 1 ? "sessão aberta" : "sessões abertas"}</span>
+        <span>{s.tabs.length} {s.tabs.length === 1 ? "open session" : "open sessions"}</span>
       </footer>
     </div>
   );

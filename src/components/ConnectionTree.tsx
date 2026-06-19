@@ -45,24 +45,24 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
   function itemsFor(node: Node | null): CtxItem[] {
     if (!node) {
       return [
-        { label: "Nova conexão", onClick: () => onNewConnection(null) },
-        { label: "Nova pasta", onClick: () => onNewFolder(null) },
+        { label: "New connection", onClick: () => onNewConnection(null) },
+        { label: "New folder", onClick: () => onNewFolder(null) },
       ];
     }
     if (node.type === "folder") {
       return [
-        { label: "Nova conexão aqui", onClick: () => onNewConnection(node.id) },
-        { label: "Nova pasta aqui", onClick: () => onNewFolder(node.id) },
+        { label: "New connection here", onClick: () => onNewConnection(node.id) },
+        { label: "New folder here", onClick: () => onNewFolder(node.id) },
         "sep",
-        { label: "Editar", onClick: () => onSelect(node) },
-        { label: "Apagar", onClick: () => onDelete(node.id) },
+        { label: "Edit", onClick: () => onSelect(node) },
+        { label: "Delete", onClick: () => onDelete(node.id) },
       ];
     }
     return [
-      { label: "Conectar", onClick: () => onOpen(node) },
-      { label: "Editar", onClick: () => onSelect(node) },
+      { label: "Connect", onClick: () => onOpen(node) },
+      { label: "Edit", onClick: () => onSelect(node) },
       "sep",
-      { label: "Apagar", onClick: () => onDelete(node.id) },
+      { label: "Delete", onClick: () => onDelete(node.id) },
     ];
   }
 
@@ -75,7 +75,7 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
   return (
     <div onContextMenu={(e) => openMenu(e, null)} style={{ padding: 6, minHeight: "100%" }}>
       {doc.nodes.length === 0 ? (
-        <div style={{ padding: 12, color: colors.dim, fontSize: 13 }}>Vazio — botão-direito aqui para criar.</div>
+        <div style={{ padding: 12, color: colors.dim, fontSize: 13 }}>Empty — right-click here to create.</div>
       ) : (
         doc.nodes.map((n) => (
           <TreeNode
@@ -172,7 +172,7 @@ function TreeNode({
       onClick={() => onSelect(node)}
       onDoubleClick={() => onOpen(node)}
       onContextMenu={(e) => onContext(e, node)}
-      title="Duplo-clique para abrir · botão-direito para opções"
+      title="Double-click to open · right-click for options"
       style={{ ...rowStyle(selected), paddingLeft: pad, cursor: "pointer" }}
     >
       <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
@@ -194,7 +194,7 @@ function TreeNode({
             <span style={{ color: eu.inherited ? colors.dim : colors.text, fontStyle: eu.inherited ? "italic" : "normal" }}>
               {" "}
               ({eu.value}
-              {eu.inherited ? " ↳herdado" : ""})
+              {eu.inherited ? " ↳inherited" : ""})
             </span>
           )}
         </span>
@@ -222,7 +222,7 @@ function DeleteBtn({ onClick }: { onClick: (e: MouseEvent) => void }) {
   return (
     <button
       onClick={onClick}
-      title="Apagar"
+      title="Delete"
       style={{ background: "transparent", border: "none", color: colors.dim, cursor: "pointer", fontSize: 14, lineHeight: 1 }}
     >
       ×

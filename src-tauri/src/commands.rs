@@ -101,7 +101,7 @@ pub fn import_mremoteng(state: State<AppState>, path: String) -> Result<ImportRe
     Ok(ImportReport {
         connections,
         message: format!(
-            "{connections} conexões importadas do mRemoteNG. Passwords ficam em branco (decifragem do formato cifrado é o próximo passo)."
+            "{connections} connections imported from mRemoteNG. Passwords are left blank (decrypting the encrypted format is the next step)."
         ),
     })
 }
@@ -116,7 +116,7 @@ pub fn export_connections(state: State<AppState>, path: String) -> Result<Import
     let connections = crate::importer::count_connections(&doc.nodes);
     Ok(ImportReport {
         connections,
-        message: format!("{connections} conexões exportadas para {path} (JSON em claro)."),
+        message: format!("{connections} connections exported to {path} (plaintext JSON)."),
     })
 }
 
@@ -128,7 +128,7 @@ pub fn import_remota_json(state: State<AppState>, path: String) -> Result<Import
     let connections = state.vault.import(doc.nodes)?;
     Ok(ImportReport {
         connections,
-        message: format!("{connections} conexões importadas do JSON Remota."),
+        message: format!("{connections} connections imported from Remota JSON."),
     })
 }
 

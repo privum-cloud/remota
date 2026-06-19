@@ -72,15 +72,15 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
   return (
     <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16, maxWidth: 420 }}>
       <h2 style={{ margin: 0, fontSize: 15, color: colors.text }}>
-        {editingId ? "Editar conexão" : "Nova conexão"}
+        {editingId ? "Edit connection" : "New connection"}
       </h2>
 
-      <Field label="Nome">
-        <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="ex.: web-prod" />
+      <Field label="Name">
+        <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. web-prod" />
       </Field>
 
       <div style={{ display: "flex", gap: 10 }}>
-        <Field label="Protocolo" style={{ flex: 1 }}>
+        <Field label="Protocol" style={{ flex: 1 }}>
           <select
             style={{ ...input, cursor: "pointer" }}
             value={protocol}
@@ -93,7 +93,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
             ))}
           </select>
         </Field>
-        <Field label="Porta" style={{ width: 110 }}>
+        <Field label="Port" style={{ width: 110 }}>
           <input
             style={input}
             value={port}
@@ -104,22 +104,22 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
       </div>
 
       <Field label="Host">
-        <input style={input} value={host} onChange={(e) => setHost(e.target.value)} placeholder="ex.: 192.168.1.10" />
+        <input style={input} value={host} onChange={(e) => setHost(e.target.value)} placeholder="e.g. 192.168.1.10" />
       </Field>
 
       <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 12 }}>
-        <div style={{ ...label, marginBottom: 8 }}>Credenciais (vazio = herda da pasta)</div>
+        <div style={{ ...label, marginBottom: 8 }}>Credentials (empty = inherit from folder)</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input style={input} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="utilizador" />
+          <input style={input} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
           <input
             style={input}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="senha"
+            placeholder="password"
           />
           {isRdp && (
-            <input style={input} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="domínio (RDP)" />
+            <input style={input} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="domain (RDP)" />
           )}
         </div>
       </div>
@@ -128,19 +128,19 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button type="submit" disabled={busy || !name || !host} style={{ ...primaryBtn, opacity: busy || !name || !host ? 0.6 : 1 }}>
-          {busy ? "…" : "Guardar"}
+          {busy ? "…" : "Save"}
         </button>
         {editingId && onConnect && (
           <button
             type="button"
             onClick={() => onConnect(editingId)}
             style={{ ...primaryBtn, background: "#2ea043" }}
-            title="Abrir sessão (igual ao duplo-clique na árvore)"
+            title="Open session (same as double-click in the tree)"
           >
-            Conectar ▸
+            Connect ▸
           </button>
         )}
-        {saved && <span style={{ color: "#7ee787", fontSize: 12 }}>Guardado ✓</span>}
+        {saved && <span style={{ color: "#7ee787", fontSize: 12 }}>Saved ✓</span>}
       </div>
     </form>
   );
