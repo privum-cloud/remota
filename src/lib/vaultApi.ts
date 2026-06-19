@@ -40,4 +40,6 @@ export const vaultApi = {
   saveConnection: (parentId: string | null, node: Node) =>
     invoke<void>("save_connection", { parentId, node }),
   deleteNode: (id: string) => invoke<void>("delete_node", { id }),
+  importMremoteng: (path: string) =>
+    invoke<{ connections: number; message: string }>("import_mremoteng", { path }),
 };

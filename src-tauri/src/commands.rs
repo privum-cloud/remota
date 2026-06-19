@@ -85,6 +85,26 @@ pub fn delete_node(state: State<AppState>, id: String) -> Result<(), VaultError>
     state.vault.delete(&id)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportReport {
+    pub connections: usize,
+    pub message: String,
+}
+
+#[tauri::command]
+pub fn import_mremoteng(state: State<AppState>, path: String) -> Result<ImportReport, VaultError> {
+    let xml = std::fs::read_to_string(&path).map_err(|e| VaultError::Io(e.to_string()))?;
+    let nodes = crate::importer::parse_confcons(&xml).map_err(|_| VaultError::BadFormat)?;
+    let connections = state.vault.import(nodes)?;
+    Ok(ImportReport {
+        connections,
+        message: format!(
+            "{connections} conexões importadas do mRemoteNG. Passwords ficam em branco (decifragem do formato cifrado é o próximo passo)."
+        ),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

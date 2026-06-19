@@ -11,6 +11,8 @@ import { MenuBar, type Menu } from "./components/MenuBar";
 import { findConnWithChain, findParentId, nodeExists } from "./lib/tree";
 import { resolveCreds } from "./lib/inherit";
 import type { Node } from "./lib/vaultApi";
+import { vaultApi } from "./lib/vaultApi";
+import { open } from "@tauri-apps/plugin-dialog";
 import { colors } from "./components/styles";
 
 type Editing = { kind: "connection" | "folder"; node: Node | null; parentId: string | null };
@@ -75,6 +77,18 @@ export default function App() {
     setActive((cur) => (cur === id ? "editor" : cur));
   }
 
+  async function importMremoteng() {
+    const path = await open({ multiple: false, filters: [{ name: "mRemoteNG confCons", extensions: ["xml"] }] });
+    if (typeof path !== "string") return; // cancelado
+    try {
+      const r = await vaultApi.importMremoteng(path);
+      await v.refresh();
+      setNotice(r.message);
+    } catch (e) {
+      setNotice("Falha no import: " + String(e));
+    }
+  }
+
   const menus: Menu[] = [
     {
       title: "Ficheiro",
@@ -82,7 +96,7 @@ export default function App() {
         { label: "Nova conexão", onClick: newConnection },
         { label: "Nova pasta", onClick: newFolder },
         "sep",
-        { label: "Importar do mRemoteNG (confCons.xml)…", onClick: () => setNotice("Import do confCons.xml chega no M4 (parser do formato cifrado do mRemoteNG).") },
+        { label: "Importar do mRemoteNG (confCons.xml)…", onClick: importMremoteng },
         { label: "Exportar conexões…", onClick: () => setNotice("Export (cópia do cofre cifrado connections.dat, ou JSON) chega a seguir.") },
         "sep",
         { label: "Bloquear cofre", onClick: lock },

@@ -1,5 +1,6 @@
 mod commands;
 mod gateway;
+mod importer;
 mod model;
 mod vault;
 
@@ -14,6 +15,7 @@ use gateway::SessionRegistry;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let registry = Arc::new(SessionRegistry::new());
             let reg = registry.clone();
@@ -38,7 +40,8 @@ pub fn run() {
             commands::vault_exists,
             commands::list_tree,
             commands::save_connection,
-            commands::delete_node
+            commands::delete_node,
+            commands::import_mremoteng
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

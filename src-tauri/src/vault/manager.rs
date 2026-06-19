@@ -82,6 +82,20 @@ impl VaultManager {
         self.persist(&password, &doc)
     }
 
+    /// Acrescenta nós (ex.: import do mRemoteNG) na raiz e persiste.
+    /// Devolve o nº de conexões importadas.
+    pub fn import(&self, nodes: Vec<Node>) -> Result<usize, VaultError> {
+        let mut guard = self.inner.lock().unwrap();
+        let u = guard.as_mut().ok_or(VaultError::Locked)?;
+        let count = crate::importer::count_connections(&nodes);
+        u.doc.nodes.extend(nodes);
+        let password = u.password.clone();
+        let doc = u.doc.clone();
+        drop(guard);
+        self.persist(&password, &doc)?;
+        Ok(count)
+    }
+
     fn persist(&self, password: &str, doc: &Document) -> Result<(), VaultError> {
         let bytes = serde_json::to_vec(doc).map_err(|e| VaultError::Io(e.to_string()))?;
         save_document(&self.path, password, KdfParams::default(), &bytes)
