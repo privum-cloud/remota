@@ -1,33 +1,47 @@
-//! remota-agent — connects out (WSS) to a remota-relay and tunnels local services.
-//!
-//! Runs on the remote machine (behind NAT). Phones home to the relay, registers,
-//! and on demand opens data channels that bridge a local service (SSH/VNC/RDP) to the relay.
+//! remota-agent binary. Runs on the remote machine (behind NAT), phones home to a relay.
 
 use clap::Parser;
+use uuid::Uuid;
+
+use remota_agent::{run_agent, AgentConfig};
 
 #[derive(Parser, Debug)]
 #[command(name = "remota-agent", version, about = "Remota self-hosted remote-access agent")]
 struct Args {
-    /// Relay WSS URL, e.g. wss://relay.example/agent/control
+    /// Relay base WS URL, e.g. ws://relay.example:8787 (TLS: wss://relay.example).
     #[arg(long)]
-    relay: Option<String>,
-    /// Enrollment token (one-time).
+    relay: String,
+    /// Enrollment token (shared secret presented on register).
     #[arg(long)]
-    token: Option<String>,
+    token: String,
     /// Friendly name shown in Remota.
+    #[arg(long, default_value = "remota-agent")]
+    name: String,
+    /// Stable agent id (default: random per run).
     #[arg(long)]
-    name: Option<String>,
+    id: Option<String>,
+    /// Comma-separated capabilities advertised to the relay.
+    #[arg(long, value_delimiter = ',', default_value = "cli")]
+    capabilities: Vec<String>,
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    println!("remota-agent {} (skeleton)", env!("CARGO_PKG_VERSION"));
+    let agent_id = args.id.unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    let cfg = AgentConfig {
+        relay_base: args.relay,
+        enroll_token: args.token,
+        agent_id,
+        name: args.name,
+        os: std::env::consts::OS.to_string(),
+        capabilities: args.capabilities,
+    };
+
     println!(
-        "relay={:?} name={:?} token={}",
-        args.relay,
-        args.name,
-        if args.token.is_some() { "<set>" } else { "<none>" }
+        "remota-agent: connecting to {} as \"{}\" (id={}, caps={:?})",
+        cfg.relay_base, cfg.name, cfg.agent_id, cfg.capabilities
     );
-    println!("Next: connect WSS, Register, heartbeat, OpenChannel→local tunnel (M-agent-0 T3/T4).");
+    run_agent(cfg).await
 }

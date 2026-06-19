@@ -1,20 +1,23 @@
-//! remota-relay — self-hosted broker (WSS) for remota-agent connections.
+//! remota-relay binary — binds a TCP listener and serves the broker.
 //!
-//! See docs/superpowers/plans/2026-06-19-m-agent-0-relay-agent-mvp.md
-//! and docs/superpowers/specs/2026-06-19-remota-agent-relay-design.md.
+//! Env:
+//!   REMOTA_RELAY_LISTEN  (default 127.0.0.1:8787)
+//!   REMOTA_ENROLL_TOKEN  (default "dev-enroll" — set a real secret in production)
+//!
+//! TLS is terminated by a reverse proxy in front of the relay (see lib.rs / M-agent-0 plan).
 
-use remota_proto::{AgentMsg, RelayMsg};
+use remota_relay::build_app;
 
 #[tokio::main]
 async fn main() {
-    println!("remota-relay {} (skeleton)", env!("CARGO_PKG_VERSION"));
-    println!("Control messages available: {}", message_catalog());
-    println!("Next: WSS control channel (/agent/control) + session brokering (M-agent-0 T3/T4).");
-}
+    let listen = std::env::var("REMOTA_RELAY_LISTEN").unwrap_or_else(|_| "127.0.0.1:8787".into());
+    let enroll = std::env::var("REMOTA_ENROLL_TOKEN").unwrap_or_else(|_| "dev-enroll".into());
 
-/// Sanity reference to the shared protocol so it's wired into the build.
-fn message_catalog() -> String {
-    let reg = AgentMsg::Heartbeat;
-    let ok = RelayMsg::Registered { ok: true };
-    format!("{:?} / {:?}", reg, ok)
+    let app = build_app(enroll);
+    let listener = tokio::net::TcpListener::bind(&listen)
+        .await
+        .unwrap_or_else(|e| panic!("bind {listen}: {e}"));
+
+    println!("remota-relay listening on ws://{listen}  (control: /agent/control, data: /data/{{id}})");
+    axum::serve(listener, app).await.expect("relay serve");
 }

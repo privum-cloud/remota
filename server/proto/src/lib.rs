@@ -25,8 +25,10 @@ pub enum RelayMsg {
     Registered { ok: bool },
     Error { msg: String },
     /// Ask the agent to open a data channel back to the relay and connect to a local target.
+    /// The agent presents `token` (single-use per session) when it connects to `/data/{session_id}`.
     OpenChannel {
         session_id: String,
+        token: String,
         target_host: String,
         target_port: u16,
     },
@@ -53,6 +55,7 @@ mod tests {
     fn relay_open_channel_roundtrips() {
         let m = RelayMsg::OpenChannel {
             session_id: "s1".into(),
+            token: "tok".into(),
             target_host: "127.0.0.1".into(),
             target_port: 22,
         };

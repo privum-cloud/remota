@@ -53,6 +53,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.102"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -671,6 +677,7 @@ dependencies = [
 name = "remota-agent"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "futures-util",
  "remota-proto",
@@ -678,6 +685,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-tungstenite 0.24.0",
+ "uuid",
 ]
 
 [[package]]
@@ -694,10 +702,12 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures-util",
+ "remota-agent",
  "remota-proto",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-tungstenite 0.24.0",
  "uuid",
 ]
 
