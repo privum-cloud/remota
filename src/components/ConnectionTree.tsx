@@ -19,6 +19,15 @@ function effectiveUser(chain: Credentials[], conn: Connection): { value?: string
   return { inherited: false };
 }
 
+type Dnd = {
+  dragId: string | null;
+  dropTarget: string | null; // id da pasta, ou "root"
+  onStart: (id: string) => void;
+  onOver: (target: string) => void;
+  onLeave: () => void;
+  onDrop: (parentId: string | null) => void;
+};
+
 type Props = {
   doc: Document;
   selectedId: string | null;
@@ -27,11 +36,27 @@ type Props = {
   onDelete: (id: string) => void;
   onNewConnection: (parentId: string | null) => void;
   onNewFolder: (parentId: string | null) => void;
+  onMove: (nodeId: string, targetParentId: string | null) => void;
 };
 
-export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, onNewConnection, onNewFolder }: Props) {
+export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, onNewConnection, onNewFolder, onMove }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; items: CtxItem[] } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  const dnd: Dnd = {
+    dragId,
+    dropTarget,
+    onStart: (id) => setDragId(id),
+    onOver: (target) => setDropTarget(target),
+    onLeave: () => setDropTarget(null),
+    onDrop: (parentId) => {
+      if (dragId) onMove(dragId, parentId);
+      setDragId(null);
+      setDropTarget(null);
+    },
+  };
 
   function toggle(id: string) {
     setCollapsed((prev) => {
@@ -73,7 +98,12 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
   }
 
   return (
-    <div onContextMenu={(e) => openMenu(e, null)} style={{ padding: 6, minHeight: "100%" }}>
+    <div
+      onContextMenu={(e) => openMenu(e, null)}
+      onDragOver={(e) => { e.preventDefault(); setDropTarget("root"); }}
+      onDrop={(e) => { e.preventDefault(); dnd.onDrop(null); }}
+      style={{ padding: 6, minHeight: "100%", outline: dropTarget === "root" ? `2px dashed ${colors.accent}` : "none", outlineOffset: -2 }}
+    >
       {doc.nodes.length === 0 ? (
         <div style={{ padding: 12, color: colors.dim, fontSize: 13 }}>Empty — right-click here to create.</div>
       ) : (
@@ -90,6 +120,7 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
             onOpen={onOpen}
             onDelete={onDelete}
             onContext={openMenu}
+            dnd={dnd}
           />
         ))
       )}
@@ -109,6 +140,7 @@ function TreeNode({
   onOpen,
   onDelete,
   onContext,
+  dnd,
 }: {
   node: Node;
   depth: number;
@@ -120,6 +152,7 @@ function TreeNode({
   onOpen: (node: Node) => void;
   onDelete: (id: string) => void;
   onContext: (e: MouseEvent, node: Node) => void;
+  dnd: Dnd;
 }) {
   const pad = 8 + depth * 14;
 
@@ -129,10 +162,15 @@ function TreeNode({
     return (
       <div>
         <div
+          draggable
+          onDragStart={(e) => { e.stopPropagation(); dnd.onStart(node.id); }}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dnd.onOver(node.id); }}
+          onDragLeave={() => dnd.onLeave()}
+          onDrop={(e) => { e.preventDefault(); e.stopPropagation(); dnd.onDrop(node.id); }}
           onClick={() => onSelect(node)}
           onDoubleClick={() => onToggle(node.id)}
           onContextMenu={(e) => onContext(e, node)}
-          style={{ ...rowStyle(node.id === selectedId), paddingLeft: pad, cursor: "pointer", color: colors.dim }}
+          style={{ ...rowStyle(node.id === selectedId), paddingLeft: pad, cursor: "pointer", color: colors.dim, ...(dnd.dropTarget === node.id ? { background: "#243447", outline: `1px solid ${colors.accent}` } : {}) }}
         >
           <span style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
             <span
@@ -159,6 +197,7 @@ function TreeNode({
               onOpen={onOpen}
               onDelete={onDelete}
               onContext={onContext}
+              dnd={dnd}
             />
           ))}
       </div>
@@ -169,10 +208,12 @@ function TreeNode({
   const selected = node.id === selectedId;
   return (
     <div
+      draggable
+      onDragStart={(e) => { e.stopPropagation(); dnd.onStart(node.id); }}
       onClick={() => onSelect(node)}
       onDoubleClick={() => onOpen(node)}
       onContextMenu={(e) => onContext(e, node)}
-      title="Double-click to open · right-click for options"
+      title="Double-click to open · drag to move · right-click for options"
       style={{ ...rowStyle(selected), paddingLeft: pad, cursor: "pointer" }}
     >
       <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>

@@ -49,6 +49,13 @@ export function findNode(doc: Document, id: string): Node | null {
   return walk(doc.nodes);
 }
 
+/** `true` se `id` é o próprio nó ou um descendente (para impedir mover pasta para dentro de si). */
+export function isInSubtree(node: Node, id: string): boolean {
+  if (node.id === id) return true;
+  if (node.type === "folder") return node.children.some((c) => isInSubtree(c, id));
+  return false;
+}
+
 /** `true` se um nó com este id já existe na árvore. */
 export function nodeExists(doc: Document, id: string): boolean {
   function walk(nodes: Node[]): boolean {

@@ -8,7 +8,7 @@ import { FolderEditor } from "./components/FolderEditor";
 import { TabBar } from "./components/TabBar";
 import { SessionView } from "./components/SessionView";
 import { MenuBar, type Menu } from "./components/MenuBar";
-import { findConnWithChain, findNode, findParentId, nodeExists } from "./lib/tree";
+import { findConnWithChain, findNode, findParentId, isInSubtree, nodeExists } from "./lib/tree";
 import { resolveCreds, resolveGateway } from "./lib/inherit";
 import type { Node } from "./lib/vaultApi";
 import { vaultApi } from "./lib/vaultApi";
@@ -78,6 +78,16 @@ export default function App() {
   function closeTab(id: string) {
     s.closeSession(id);
     setActive((cur) => (cur === id ? "editor" : cur));
+  }
+
+  // Arrastar um nó para dentro de uma pasta (ou raiz). O backend (upsert) trata do mover.
+  async function moveNode(nodeId: string, targetParentId: string | null) {
+    if (nodeId === targetParentId) return;
+    const node = findNode(v.tree, nodeId);
+    if (!node) return;
+    if (findParentId(v.tree, nodeId) === targetParentId) return; // já está lá
+    if (node.type === "folder" && targetParentId && isInSubtree(node, targetParentId)) return; // evita ciclo
+    await v.save(targetParentId, node);
   }
 
   async function importMremoteng() {
@@ -180,6 +190,7 @@ export default function App() {
             onDelete={deleteNode}
             onNewConnection={newConnectionAt}
             onNewFolder={newFolderAt}
+            onMove={moveNode}
           />
         </aside>
 
