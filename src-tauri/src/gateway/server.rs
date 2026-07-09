@@ -19,6 +19,11 @@ use crate::gateway::{SessionRegistry, SessionSpec};
 #[derive(Deserialize)]
 struct TokenQuery {
     token: String,
+    /// Dimensões iniciais do terminal (SSH). Ignoradas pelas outras rotas.
+    #[serde(default)]
+    cols: Option<u16>,
+    #[serde(default)]
+    rows: Option<u16>,
 }
 
 pub fn router(registry: Arc<SessionRegistry>) -> Router {
@@ -59,7 +64,11 @@ async fn ssh_handler(
     State(registry): State<Arc<SessionRegistry>>,
 ) -> Response {
     match registry.consume(&id, &q.token) {
-        Some(spec) => ws.on_upgrade(move |socket| crate::gateway::ssh::proxy_ssh(socket, spec)),
+        Some(spec) => {
+            let cols = q.cols.filter(|c| *c > 0).unwrap_or(80);
+            let rows = q.rows.filter(|r| *r > 0).unwrap_or(24);
+            ws.on_upgrade(move |socket| crate::gateway::ssh::proxy_ssh(socket, spec, cols, rows))
+        }
         None => StatusCode::UNAUTHORIZED.into_response(),
     }
 }
@@ -151,5 +160,69 @@ mod tests {
         let port = start(reg.clone()).await;
         let url = format!("ws://127.0.0.1:{port}/session/{}?token=errado", spec.id);
         assert!(tokio_tungstenite::connect_async(&url).await.is_err());
+    }
+
+    /// Prova (vivo) o fix do tamanho do PTY: o remoto vê as dimensões pedidas no `?cols=&rows=`
+    /// e o resize (window_change) propaga. Precisa de sshd local + chave autorizada. Correr:
+    ///   SSH_USER=sysadmin SSH_KEY=$HOME/.ssh/id_rsa \
+    ///     cargo test -p remota gateway::server::tests::ssh_pty_size -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn ssh_pty_size_and_resize() {
+        use crate::gateway::SessionKind;
+        use std::time::Duration;
+
+        let user = std::env::var("SSH_USER").unwrap_or_else(|_| "sysadmin".into());
+        let key = std::env::var("SSH_KEY")
+            .unwrap_or_else(|_| format!("{}/.ssh/id_rsa", std::env::var("HOME").unwrap()));
+
+        let reg = Arc::new(SessionRegistry::new());
+        let spec = reg.create_with_creds(
+            "127.0.0.1:22".into(),
+            SessionKind::Ssh,
+            Some(user),
+            None,
+            Some(key),
+            None,
+            None,
+        );
+        let port = start(reg.clone()).await;
+
+        let url = format!(
+            "ws://127.0.0.1:{port}/ssh/{}?token={}&cols=203&rows=51",
+            spec.id, spec.token
+        );
+        let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+
+        async fn wait_for(
+            ws: &mut (impl StreamExt<Item = Result<TMessage, tokio_tungstenite::tungstenite::Error>> + Unpin),
+            needle: &str,
+        ) -> bool {
+            let mut acc = String::new();
+            tokio::time::timeout(Duration::from_secs(8), async {
+                while let Some(Ok(m)) = ws.next().await {
+                    match m {
+                        TMessage::Binary(b) => acc.push_str(&String::from_utf8_lossy(&b)),
+                        TMessage::Text(t) => acc.push_str(&t),
+                        _ => {}
+                    }
+                    if acc.contains(needle) {
+                        return true;
+                    }
+                }
+                false
+            })
+            .await
+            .unwrap_or(false)
+        }
+
+        // `stty size` imprime "rows cols".
+        ws.send(TMessage::Binary(b"stty size\n".to_vec())).await.unwrap();
+        assert!(wait_for(&mut ws, "51 203").await, "PTY inicial devia ser 51x203");
+
+        // Resize via mensagem de controlo (texto/JSON) → window_change.
+        ws.send(TMessage::Text("{\"type\":\"resize\",\"cols\":120,\"rows\":40}".into())).await.unwrap();
+        ws.send(TMessage::Binary(b"stty size\n".to_vec())).await.unwrap();
+        assert!(wait_for(&mut ws, "40 120").await, "após resize devia ser 40x120");
     }
 }

@@ -22,24 +22,41 @@ export function SshView({ wsUrl }: { wsUrl: string }) {
     term.open(el);
     fit.fit();
 
-    const ws = new WebSocket(wsUrl);
+    // Abre o WS já com as dimensões reais → o PTY nasce do tamanho certo (k9s/vim ocupam tudo).
+    const ws = new WebSocket(`${wsUrl}&cols=${term.cols}&rows=${term.rows}`);
     ws.binaryType = "arraybuffer";
     const enc = new TextEncoder();
+
+    // Mensagem de controlo (texto/JSON) — distinta dos keystrokes (binário).
+    const sendResize = () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+      }
+    };
 
     ws.onmessage = (ev) => {
       if (typeof ev.data === "string") term.write(ev.data);
       else term.write(new Uint8Array(ev.data));
     };
+    ws.onopen = () => sendResize(); // garante o PTY alinhado assim que liga
     ws.onclose = () => term.write("\r\n\x1b[90m[session ended]\x1b[0m\r\n");
 
     const onData = term.onData((d) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(enc.encode(d));
     });
-    const onResize = () => fit.fit();
-    window.addEventListener("resize", onResize);
+
+    // Reajusta + avisa o remoto sempre que o PAINEL muda de tamanho (não só a janela).
+    const refit = () => {
+      fit.fit();
+      sendResize();
+    };
+    const ro = new ResizeObserver(() => refit());
+    ro.observe(el);
+    window.addEventListener("resize", refit);
 
     return () => {
-      window.removeEventListener("resize", onResize);
+      ro.disconnect();
+      window.removeEventListener("resize", refit);
       onData.dispose();
       ws.close();
       term.dispose();

@@ -21,10 +21,19 @@ impl Handler for ClientHandler {
     }
 }
 
+/// Mensagem de controlo do frontend (texto/JSON, distinta dos keystrokes binários).
+#[derive(serde::Deserialize)]
+struct Ctrl {
+    #[serde(rename = "type")]
+    t: String,
+    cols: Option<u16>,
+    rows: Option<u16>,
+}
+
 /// Conecta via SSH (russh), autentica por password, abre um PTY/shell e relaya
-/// os bytes do canal <-> WebSocket (xterm.js no front).
-pub async fn proxy_ssh(socket: WebSocket, spec: SessionSpec) {
-    if let Err(e) = run(socket, spec).await {
+/// os bytes do canal <-> WebSocket (xterm.js no front). `cols`/`rows` = tamanho inicial do PTY.
+pub async fn proxy_ssh(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u16) {
+    if let Err(e) = run(socket, spec, cols, rows).await {
         eprintln!("ssh proxy error: {e}");
     }
 }
@@ -32,6 +41,8 @@ pub async fn proxy_ssh(socket: WebSocket, spec: SessionSpec) {
 async fn run(
     socket: WebSocket,
     spec: SessionSpec,
+    cols: u16,
+    rows: u16,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let username = spec.username.clone().unwrap_or_default();
     let password = spec.password.clone().unwrap_or_default();
@@ -81,7 +92,7 @@ async fn run(
 
     let mut channel = handle.channel_open_session().await?;
     channel
-        .request_pty(false, "xterm-256color", 80, 24, 0, 0, &[])
+        .request_pty(false, "xterm-256color", cols as u32, rows as u32, 0, 0, &[])
         .await?;
     channel.request_shell(true).await?;
 
@@ -103,7 +114,17 @@ async fn run(
             ws_msg = ws_rx.next() => {
                 match ws_msg {
                     Some(Ok(Message::Binary(b))) => { channel.data(&b[..]).await?; }
-                    Some(Ok(Message::Text(t))) => { channel.data(t.as_bytes()).await?; }
+                    Some(Ok(Message::Text(t))) => {
+                        // Texto = controlo (JSON). resize → window_change (SIGWINCH no remoto → k9s/vim redesenham).
+                        match serde_json::from_str::<Ctrl>(&t) {
+                            Ok(c) if c.t == "resize" => {
+                                let w = c.cols.unwrap_or(cols);
+                                let h = c.rows.unwrap_or(rows);
+                                let _ = channel.window_change(w as u32, h as u32, 0, 0).await;
+                            }
+                            _ => { channel.data(t.as_bytes()).await?; }
+                        }
+                    }
                     Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
                     _ => {}
                 }
