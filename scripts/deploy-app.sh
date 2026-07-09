@@ -12,7 +12,8 @@
 set -euo pipefail
 
 TARGET="${1:?usage: SSHPASS=<pw> ./scripts/deploy-app.sh user@host [deb-path]}"
-DEB="${2:-src-tauri/target/release/bundle/deb/Remota_0.1.0_amd64.deb}"
+# Default: o .deb mais recente gerado (não fixa a versão).
+DEB="${2:-$(ls -t src-tauri/target/release/bundle/deb/*.deb 2>/dev/null | head -1)}"
 : "${SSHPASS:?set SSHPASS to the target password}"
 
 [[ -f "$DEB" ]] || { echo "deb not found: $DEB — build it: npm run tauri -- build --bundles deb" >&2; exit 1; }
