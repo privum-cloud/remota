@@ -29,7 +29,10 @@ export function TabBar({ tabs, activeId, onActivate, onClose, onReconnect, onDup
           style={tabStyle(activeId === t.id)}
           title={`${t.protocol.toUpperCase()} — ${t.target}`}
         >
-          <span style={{ width: 7, height: 7, borderRadius: 4, flex: "0 0 auto", background: t.error ? colors.danger : protoColor[t.protocol] ?? colors.dim }} />
+          <span
+            title={t.error || t.dead ? "dead / disconnected" : "live"}
+            style={{ width: 7, height: 7, borderRadius: 4, flex: "0 0 auto", background: t.error || t.dead ? colors.danger : protoColor[t.protocol] ?? colors.dim }}
+          />
           <span style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
           <button onClick={(e) => { e.stopPropagation(); onClose(t.id); }} style={closeBtn} title="Close">
             ×

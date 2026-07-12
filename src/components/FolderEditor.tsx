@@ -3,7 +3,25 @@ import type { Node } from "../lib/vaultApi";
 import { colors, input, label, primaryBtn } from "./styles";
 import { GatewaySection, type GwForm, emptyGw, gwFromModel, gwToModel } from "./GatewaySection";
 
-const ICONS = ["📁", "📂", "🗂️", "🗄️", "🔒", "🖥️", "🌐", "☁️", "⚙️", "🛠️", "🏠", "🐧", "🪟", "🚀", "🔑", "🐳", "📦", "🛡️"];
+const ICONS = [
+  // pastas / storage
+  "📁", "📂", "🗂️", "🗄️", "🗃️", "📦", "💾",
+  // hosts / OS
+  "🖥️", "💻", "⌨️", "🐧", "🪟", "🍎",
+  // containers / cloud native / git
+  "🐳", "☸️", "🐙", "🦊",
+  // bases de dados / linguagens
+  "🐘", "🐬", "🐍", "☕",
+  // cloud / rede
+  "☁️", "🌩️", "🌐", "🌍", "🕸️", "📡", "🛰️",
+  // devops / ferramentas / automação
+  "⚙️", "🛠️", "🧰", "🔧", "🏗️", "🤖",
+  // segurança
+  "🔒", "🔐", "🔑", "🛡️", "🔥", "🚨",
+  // observabilidade / ambientes / destaque
+  "📊", "📈", "🧪", "🎯", "⚡", "🚀",
+  "🏠", "🏢", "⭐", "🔴", "🟢", "🔵",
+];
 
 export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: Node) => Promise<void> }) {
   const editingId = node?.type === "folder" ? node.id : null;

@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
 /** Terminal SSH: liga ao WS do gateway (que fala russh ao host) via xterm.js. */
-export function SshView({ wsUrl }: { wsUrl: string }) {
+export function SshView({ wsUrl, onClosed }: { wsUrl: string; onClosed?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,7 +39,10 @@ export function SshView({ wsUrl }: { wsUrl: string }) {
       else term.write(new Uint8Array(ev.data));
     };
     ws.onopen = () => sendResize(); // garante o PTY alinhado assim que liga
-    ws.onclose = () => term.write("\r\n\x1b[90m[session ended]\x1b[0m\r\n");
+    ws.onclose = () => {
+      term.write("\r\n\x1b[90m[session ended]\x1b[0m\r\n");
+      onClosed?.();
+    };
 
     const onData = term.onData((d) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(enc.encode(d));

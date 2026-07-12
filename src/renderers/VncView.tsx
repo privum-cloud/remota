@@ -7,9 +7,11 @@ type Props = {
   wsUrl: string;
   /** Senha VNC, se o servidor exigir auth. */
   password?: string;
+  /** Chamado quando a sessão cai/termina (indicador vermelho na aba). */
+  onClosed?: () => void;
 };
 
-export function VncView({ wsUrl, password }: Props) {
+export function VncView({ wsUrl, password, onClosed }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,7 +22,12 @@ export function VncView({ wsUrl, password }: Props) {
     const rfb = new RFB(el, wsUrl, options);
     rfb.scaleViewport = true;
     rfb.background = "#000";
-    return () => rfb.disconnect();
+    const onDisconnect = () => onClosed?.();
+    rfb.addEventListener("disconnect", onDisconnect);
+    return () => {
+      rfb.removeEventListener("disconnect", onDisconnect);
+      rfb.disconnect();
+    };
   }, [wsUrl, password]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;

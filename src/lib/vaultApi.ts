@@ -47,8 +47,15 @@ export type Node =
     }
   | { type: "connection"; id: string; name: string; conn: Connection };
 
+/** Item na lixeira: o nó removido + o id da pasta-pai original. */
+export interface TrashEntry {
+  node: Node;
+  parent_id?: string;
+}
+
 export interface Document {
   nodes: Node[];
+  trash: TrashEntry[];
 }
 
 // Wrappers tipados dos comandos Tauri (Tauri v2 converte snake_case→camelCase nos args).
@@ -60,6 +67,9 @@ export const vaultApi = {
   saveConnection: (parentId: string | null, node: Node) =>
     invoke<void>("save_connection", { parentId, node }),
   deleteNode: (id: string) => invoke<void>("delete_node", { id }),
+  restoreNode: (id: string) => invoke<void>("restore_node", { id }),
+  deleteForever: (id: string) => invoke<void>("delete_forever", { id }),
+  emptyTrash: () => invoke<void>("empty_trash"),
   importMremoteng: (path: string) =>
     invoke<{ connections: number; message: string }>("import_mremoteng", { path }),
   exportConnections: (path: string) =>

@@ -4,7 +4,7 @@ import { SshView } from "../renderers/SshView";
 import { RdpView } from "../renderers/RdpView";
 import { colors } from "./styles";
 
-export function SessionView({ tab }: { tab: SessionTab }) {
+export function SessionView({ tab, onDead }: { tab: SessionTab; onDead?: () => void }) {
   if (tab.error) {
     return (
       <div style={{ padding: 20 }}>
@@ -17,11 +17,11 @@ export function SessionView({ tab }: { tab: SessionTab }) {
 
   if (tab.protocol === "vnc") {
     // key={epoch} força remount no reconnect (token é de uso único).
-    return <VncView key={tab.epoch} wsUrl={tab.wsUrl} password={tab.password} />;
+    return <VncView key={tab.epoch} wsUrl={tab.wsUrl} password={tab.password} onClosed={onDead} />;
   }
 
   if (tab.protocol === "ssh") {
-    return <SshView key={tab.epoch} wsUrl={tab.wsUrl} />;
+    return <SshView key={tab.epoch} wsUrl={tab.wsUrl} onClosed={onDead} />;
   }
 
   if (tab.protocol === "rdp") {

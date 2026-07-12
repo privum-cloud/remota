@@ -43,6 +43,9 @@ pub fn run() {
             commands::list_tree,
             commands::save_connection,
             commands::delete_node,
+            commands::restore_node,
+            commands::delete_forever,
+            commands::empty_trash,
             commands::import_mremoteng,
             commands::export_connections,
             commands::import_remota_json

@@ -7,7 +7,7 @@ export type VaultStatus = "checking" | "locked" | "unlocked";
 export function useVault() {
   const [status, setStatus] = useState<VaultStatus>("checking");
   const [exists, setExists] = useState(false);
-  const [tree, setTree] = useState<Document>({ nodes: [] });
+  const [tree, setTree] = useState<Document>({ nodes: [], trash: [] });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export function useVault() {
 
   const lock = useCallback(async () => {
     await vaultApi.lock();
-    setTree({ nodes: [] });
+    setTree({ nodes: [], trash: [] });
     setStatus("locked");
   }, []);
 
@@ -59,5 +59,26 @@ export function useVault() {
     [refresh],
   );
 
-  return { status, exists, tree, error, unlock, lock, refresh, save, remove };
+  const restore = useCallback(
+    async (id: string) => {
+      await vaultApi.restoreNode(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const deleteForever = useCallback(
+    async (id: string) => {
+      await vaultApi.deleteForever(id);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const emptyTrash = useCallback(async () => {
+    await vaultApi.emptyTrash();
+    await refresh();
+  }, [refresh]);
+
+  return { status, exists, tree, error, unlock, lock, refresh, save, remove, restore, deleteForever, emptyTrash };
 }

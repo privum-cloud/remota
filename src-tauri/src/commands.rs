@@ -83,9 +83,28 @@ pub fn save_connection(
     state.vault.upsert(parent_id.as_deref(), node)
 }
 
+/// Soft-delete: move o nó para a lixeira (restaurável).
 #[tauri::command]
 pub fn delete_node(state: State<AppState>, id: String) -> Result<(), VaultError> {
     state.vault.delete(&id)
+}
+
+/// Restaura um item da lixeira para o sítio original.
+#[tauri::command]
+pub fn restore_node(state: State<AppState>, id: String) -> Result<(), VaultError> {
+    state.vault.restore(&id)
+}
+
+/// Apaga definitivamente um item da lixeira.
+#[tauri::command]
+pub fn delete_forever(state: State<AppState>, id: String) -> Result<(), VaultError> {
+    state.vault.delete_forever(&id)
+}
+
+/// Esvazia a lixeira.
+#[tauri::command]
+pub fn empty_trash(state: State<AppState>) -> Result<(), VaultError> {
+    state.vault.empty_trash()
 }
 
 #[derive(Serialize)]

@@ -92,15 +92,45 @@ pub fn node_id(node: &Node) -> &str {
     }
 }
 
+/// Item na lixeira: o nó removido + o id da pasta-pai original (para restaurar no sítio).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TrashEntry {
+    pub node: Node,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Document {
     #[serde(default)]
     pub nodes: Vec<Node>,
+    /// Lixeira: nós apagados (soft-delete), restauráveis. `default` p/ compat com cofres antigos.
+    #[serde(default)]
+    pub trash: Vec<TrashEntry>,
 }
 
 impl Document {
     pub fn empty() -> Self {
-        Self { nodes: Vec::new() }
+        Self { nodes: Vec::new(), trash: Vec::new() }
+    }
+
+    /// Remove um nó da árvore e devolve-o com o id da pasta-pai (None = raiz). Para a lixeira.
+    pub fn remove_returning(&mut self, id: &str) -> Option<(Node, Option<String>)> {
+        fn walk(nodes: &mut Vec<Node>, id: &str, parent: Option<&str>) -> Option<(Node, Option<String>)> {
+            if let Some(pos) = nodes.iter().position(|n| node_id(n) == id) {
+                return Some((nodes.remove(pos), parent.map(|s| s.to_string())));
+            }
+            for n in nodes.iter_mut() {
+                if let Node::Folder { id: fid, children, .. } = n {
+                    let pid = fid.clone();
+                    if let Some(found) = walk(children, id, Some(&pid)) {
+                        return Some(found);
+                    }
+                }
+            }
+            None
+        }
+        walk(&mut self.nodes, id, None)
     }
 
     pub fn find<'a>(&'a self, id: &str) -> Option<&'a Node> {
@@ -169,6 +199,7 @@ mod tests {
                     conn: sample_conn("10.0.0.1"),
                 }],
             }],
+            trash: vec![],
         };
         let json = serde_json::to_vec(&doc).unwrap();
         let back: Document = serde_json::from_slice(&json).unwrap();
@@ -190,6 +221,7 @@ mod tests {
                     conn: sample_conn("10.0.0.1"),
                 }],
             }],
+            trash: vec![],
         };
         assert!(doc.find("c1").is_some());
         assert!(doc.find("missing").is_none());
@@ -210,6 +242,7 @@ mod tests {
                     conn: sample_conn("10.0.0.1"),
                 }],
             }],
+            trash: vec![],
         };
         assert!(doc.remove("c1"));
         assert!(doc.find("c1").is_none());

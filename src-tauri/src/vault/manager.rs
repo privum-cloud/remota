@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use zeroize::Zeroizing;
 
-use crate::model::{node_id, Document, Node};
+use crate::model::{node_id, Document, Node, TrashEntry};
 use crate::vault::{load_document, save_document, KdfParams, VaultError};
 
 struct Unlocked {
@@ -72,10 +72,55 @@ impl VaultManager {
         self.persist(&password, &doc)
     }
 
+    /// Soft-delete: move o nó para a lixeira (restaurável), guardando o pai original.
     pub fn delete(&self, id: &str) -> Result<(), VaultError> {
         let mut guard = self.inner.lock().unwrap();
         let u = guard.as_mut().ok_or(VaultError::Locked)?;
-        u.doc.remove(id);
+        if let Some((node, parent_id)) = u.doc.remove_returning(id) {
+            u.doc.trash.push(TrashEntry { node, parent_id });
+        }
+        let password = u.password.clone();
+        let doc = u.doc.clone();
+        drop(guard);
+        self.persist(&password, &doc)
+    }
+
+    /// Restaura um item da lixeira para a pasta-pai original (ou raiz se já não existir).
+    pub fn restore(&self, id: &str) -> Result<(), VaultError> {
+        let mut guard = self.inner.lock().unwrap();
+        let u = guard.as_mut().ok_or(VaultError::Locked)?;
+        if let Some(pos) = u.doc.trash.iter().position(|e| node_id(&e.node) == id) {
+            let entry = u.doc.trash.remove(pos);
+            let has_parent = entry
+                .parent_id
+                .as_deref()
+                .map(|pid| u.doc.find(pid).is_some())
+                .unwrap_or(false);
+            let parent = if has_parent { entry.parent_id.as_deref() } else { None };
+            insert_into(&mut u.doc.nodes, parent, entry.node)?;
+        }
+        let password = u.password.clone();
+        let doc = u.doc.clone();
+        drop(guard);
+        self.persist(&password, &doc)
+    }
+
+    /// Apaga definitivamente um item da lixeira.
+    pub fn delete_forever(&self, id: &str) -> Result<(), VaultError> {
+        let mut guard = self.inner.lock().unwrap();
+        let u = guard.as_mut().ok_or(VaultError::Locked)?;
+        u.doc.trash.retain(|e| node_id(&e.node) != id);
+        let password = u.password.clone();
+        let doc = u.doc.clone();
+        drop(guard);
+        self.persist(&password, &doc)
+    }
+
+    /// Esvazia a lixeira (apaga tudo definitivamente).
+    pub fn empty_trash(&self) -> Result<(), VaultError> {
+        let mut guard = self.inner.lock().unwrap();
+        let u = guard.as_mut().ok_or(VaultError::Locked)?;
+        u.doc.trash.clear();
         let password = u.password.clone();
         let doc = u.doc.clone();
         drop(guard);
@@ -197,6 +242,26 @@ mod tests {
         mgr.upsert(None, conn_node("c1", "h")).unwrap();
         mgr.delete("c1").unwrap();
         assert!(mgr.tree().unwrap().find("c1").is_none());
+    }
+
+    #[test]
+    fn soft_delete_moves_to_trash_and_restores() {
+        let mgr = VaultManager::new(tmp("trash"));
+        mgr.unlock("m").unwrap();
+        mgr.upsert(None, conn_node("c1", "h")).unwrap();
+        mgr.delete("c1").unwrap();
+        let doc = mgr.tree().unwrap();
+        assert!(doc.find("c1").is_none(), "saiu da árvore");
+        assert_eq!(doc.trash.len(), 1, "foi para a lixeira");
+
+        mgr.restore("c1").unwrap();
+        let doc = mgr.tree().unwrap();
+        assert!(doc.find("c1").is_some(), "restaurado na árvore");
+        assert!(doc.trash.is_empty(), "lixeira ficou vazia");
+
+        mgr.delete("c1").unwrap();
+        mgr.delete_forever("c1").unwrap();
+        assert!(mgr.tree().unwrap().trash.is_empty(), "delete_forever limpa da lixeira");
     }
 
     #[test]

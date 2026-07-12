@@ -6,5 +6,7 @@ declare module "@novnc/novnc" {
     background: string;
     disconnect(): void;
     sendCredentials(creds: { password?: string; username?: string }): void;
+    addEventListener(type: string, listener: (e: Event) => void): void;
+    removeEventListener(type: string, listener: (e: Event) => void): void;
   }
 }

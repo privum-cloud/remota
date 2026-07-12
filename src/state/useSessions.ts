@@ -6,6 +6,8 @@ type SessionInfo = { wsUrl: string; kind: string };
 
 export interface SessionTab {
   id: string; // id único da aba (≠ id da conexão; permite múltiplas abas da mesma conexão)
+  connId?: string; // id da conexão de origem (para o duplo-clique voltar à aba já aberta)
+  dead?: boolean; // sessão terminada/caiu (indicador vermelho na aba)
   title: string;
   protocol: Protocol;
   target: string; // host:port
@@ -31,6 +33,7 @@ export interface OpenOpts {
   domain?: string;
   gateway?: Gateway;
   relay?: Relay;
+  connId?: string;
 }
 
 const DEFAULT_PORT: Record<Protocol, number> = { ssh: 22, rdp: 3389, vnc: 5900, telnet: 23 };
@@ -75,6 +78,7 @@ export function useSessions() {
       ...t,
       {
         id,
+        connId: opts.connId,
         title: opts.title,
         protocol: opts.protocol,
         target,
@@ -100,7 +104,12 @@ export function useSessions() {
     const tab = tabsRef.current.find((x) => x.id === id);
     if (!tab) return;
     const { wsUrl, error } = await openGateway(tab.target, tab.protocol, tab.username, tab.password, tab.keyPath, tab.gateway, tab.relay);
-    setTabs((t) => t.map((x) => (x.id === id ? { ...x, wsUrl, error, epoch: x.epoch + 1 } : x)));
+    setTabs((t) => t.map((x) => (x.id === id ? { ...x, wsUrl, error, dead: false, epoch: x.epoch + 1 } : x)));
+  }, []);
+
+  /** Marca a sessão como terminada/caída (indicador vermelho). Chamado quando o WS fecha. */
+  const markDead = useCallback((id: string) => {
+    setTabs((t) => t.map((x) => (x.id === id ? { ...x, dead: true } : x)));
   }, []);
 
   const duplicate = useCallback(
@@ -124,5 +133,5 @@ export function useSessions() {
     [openSession],
   );
 
-  return { tabs, openSession, closeSession, reconnect, duplicate };
+  return { tabs, openSession, closeSession, reconnect, duplicate, markDead };
 }

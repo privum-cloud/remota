@@ -47,14 +47,15 @@ type Props = {
   doc: Document;
   selectedId: string | null;
   onSelect: (node: Node) => void;
-  onOpen: (node: Node) => void;
+  onOpen: (node: Node) => void; // duplo-clique: volta à aba já aberta (ou abre)
+  onOpenNew: (node: Node) => void; // força uma nova aba
   onDelete: (id: string) => void;
   onNewConnection: (parentId: string | null) => void;
   onNewFolder: (parentId: string | null) => void;
   onMove: (nodeId: string, targetParentId: string | null) => void;
 };
 
-export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, onNewConnection, onNewFolder, onMove }: Props) {
+export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onOpenNew, onDelete, onNewConnection, onNewFolder, onMove }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; items: CtxItem[] } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [dragId, setDragId] = useState<string | null>(null);
@@ -103,7 +104,8 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onDelete, on
       ];
     }
     return [
-      { label: "Connect", onClick: () => onOpen(node) },
+      { label: "Open", onClick: () => onOpen(node) },
+      { label: "Open in new tab", onClick: () => onOpenNew(node) },
       { label: "Edit", onClick: () => onSelect(node) },
       "sep",
       { label: "Delete", onClick: () => onDelete(node.id) },

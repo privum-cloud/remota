@@ -7,6 +7,7 @@ import { ConnectionEditor } from "./components/ConnectionEditor";
 import { FolderEditor } from "./components/FolderEditor";
 import { TabBar } from "./components/TabBar";
 import { SessionView } from "./components/SessionView";
+import { TrashPanel } from "./components/TrashPanel";
 import { MenuBar, type Menu } from "./components/MenuBar";
 import { findConnWithChain, findNode, findParentId, isInSubtree, nodeExists } from "./lib/tree";
 import { resolveCreds, resolveGateway } from "./lib/inherit";
@@ -58,12 +59,18 @@ export default function App() {
     setEditing({ kind: n.type === "folder" ? "folder" : "connection", node: n, parentId });
   }
 
-  async function openConn(id: string) {
+  async function openConn(id: string, forceNew = false) {
+    // Duplo-clique: se já há uma aba aberta desta conexão, volta a ela (não abre outra).
+    if (!forceNew) {
+      const existing = s.tabs.find((t) => t.connId === id);
+      if (existing) { setActive(existing.id); return; }
+    }
     const found = findConnWithChain(v.tree, id);
     if (!found) return;
     const eff = resolveCreds(found.chain, found.node.conn);
     const gw = resolveGateway(found.gateways, found.node.conn);
     const newId = await s.openSession({
+      connId: id,
       title: found.node.name,
       protocol: found.node.conn.protocol,
       host: found.node.conn.host,
@@ -132,12 +139,21 @@ export default function App() {
     const name = node?.name ?? "este item";
     const isFolder = node?.type === "folder";
     const msg = isFolder
-      ? `Delete the folder "${name}" and everything inside it? This cannot be undone.`
-      : `Delete the connection "${name}"? This cannot be undone.`;
-    const ok = await confirm(msg, { title: "Confirm", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" });
+      ? `Move the folder "${name}" and its contents to the Trash?`
+      : `Move the connection "${name}" to the Trash?`;
+    const ok = await confirm(msg, { title: "Move to Trash", kind: "warning", okLabel: "Move to Trash", cancelLabel: "Cancel" });
     if (!ok) return;
-    await v.remove(id);
+    await v.remove(id); // soft-delete → lixeira (restaurável)
     if (selected?.id === id) setEditing({ kind: "connection", node: null, parentId: null });
+  }
+
+  async function deleteForever(id: string) {
+    const ok = await confirm("Delete this item permanently? This cannot be undone.", { title: "Delete forever", kind: "warning", okLabel: "Delete forever", cancelLabel: "Cancel" });
+    if (ok) await v.deleteForever(id);
+  }
+  async function emptyTrash() {
+    const ok = await confirm("Permanently delete everything in the Trash? This cannot be undone.", { title: "Empty Trash", kind: "warning", okLabel: "Empty Trash", cancelLabel: "Cancel" });
+    if (ok) await v.emptyTrash();
   }
 
   const menus: Menu[] = [
@@ -189,16 +205,20 @@ export default function App() {
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <aside style={sidebar}>
           <div style={sidebarHead}>Connections</div>
-          <ConnectionTree
-            doc={v.tree}
-            selectedId={selected?.id ?? null}
-            onSelect={selectNode}
-            onOpen={(n) => { if (n.type === "connection") openConn(n.id); }}
-            onDelete={deleteNode}
-            onNewConnection={newConnectionAt}
-            onNewFolder={newFolderAt}
-            onMove={moveNode}
-          />
+          <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+            <ConnectionTree
+              doc={v.tree}
+              selectedId={selected?.id ?? null}
+              onSelect={selectNode}
+              onOpen={(n) => { if (n.type === "connection") openConn(n.id); }}
+              onOpenNew={(n) => { if (n.type === "connection") openConn(n.id, true); }}
+              onDelete={deleteNode}
+              onNewConnection={newConnectionAt}
+              onNewFolder={newFolderAt}
+              onMove={moveNode}
+            />
+          </div>
+          <TrashPanel trash={v.tree.trash ?? []} onRestore={v.restore} onDeleteForever={deleteForever} onEmpty={emptyTrash} />
         </aside>
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -220,7 +240,7 @@ export default function App() {
             </div>
             {s.tabs.map((t) => (
               <div key={t.id} style={{ ...pane, display: active === t.id ? "block" : "none" }}>
-                <SessionView tab={t} />
+                <SessionView tab={t} onDead={() => s.markDead(t.id)} />
               </div>
             ))}
           </div>
@@ -284,7 +304,7 @@ const banner: CSSProperties = {
   borderBottom: `1px solid ${colors.border}`,
   color: colors.text,
 };
-const sidebar: CSSProperties = { width: 320, borderRight: `1px solid ${colors.border}`, overflow: "auto", display: "flex", flexDirection: "column" };
+const sidebar: CSSProperties = { width: 320, borderRight: `1px solid ${colors.border}`, overflow: "hidden", display: "flex", flexDirection: "column" };
 const sidebarHead: CSSProperties = {
   padding: "8px 12px",
   fontSize: 11,
