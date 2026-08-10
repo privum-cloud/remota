@@ -35,6 +35,9 @@ export function RdpView({ proxyUrl, destination, username, password, domain }: P
       if (domain) b.serverDomain(domain);
       b.destination(destination);
       b.proxyAddress(proxyUrl);
+      // ironrdp-web (Devolutions model) requires a proxy auth token in the RDCleanPath request.
+      // Our gateway doesn't validate it, so any non-empty placeholder satisfies the client.
+      b.authToken("remota");
       b.desktopSize(new DesktopSize(1280, 720));
       b.renderCanvas(canvasRef.current);
       b.extension(new Extension("enable_credssp", true)); // NLA/CredSSP

@@ -28,7 +28,7 @@ sshpass -e scp $OPTS "$DEB" "$TARGET:/tmp/$BASE"
 echo ">> $TARGET: installing (apt resolves deps)"
 # sshpass -e uses SSHPASS for the SSH auth; the here-string feeds the same password to sudo -S.
 sshpass -e ssh $OPTS "$TARGET" \
-	"sudo -S -p '' apt-get install -y /tmp/$BASE >/dev/null 2>&1; \
+	"sudo -S -p '' apt-get install -y --reinstall /tmp/$BASE >/dev/null 2>&1; \
 	 dpkg -l | grep -E '^ii +remota ' | awk '{print \"installed:\", \$2, \$3}'; \
 	 rm -f /tmp/$BASE" <<<"$SSHPASS"
 
