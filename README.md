@@ -63,26 +63,23 @@ vault and self-hosted access to machines behind NAT.
 
 Remota runs on Linux (x86_64). Pick your format:
 
+Download the latest package from the **[Releases](../../releases/latest)** page:
+
 ### Debian / Ubuntu (`.deb`)
 
-Download [`packages/Remota_0.1.2_amd64.deb`](packages/Remota_0.1.2_amd64.deb) (or from the
-[Releases](../../releases) page), then:
-
 ```bash
-sudo apt install ./Remota_0.1.2_amd64.deb
+sudo apt install ./Remota_*_amd64.deb
 ```
 
 ### Fedora / RHEL / openSUSE (`.rpm`)
 
-Download [`packages/Remota-0.1.2-1.x86_64.rpm`](packages/Remota-0.1.2-1.x86_64.rpm), then:
-
 ```bash
-sudo dnf install ./Remota-0.1.2-1.x86_64.rpm
+sudo dnf install ./Remota-*.x86_64.rpm
 ```
 
 ### Any Linux (`.AppImage`)
 
-Grab the `.AppImage` from the [Releases](../../releases) page (portable — no install), then:
+Portable — no install:
 
 ```bash
 chmod +x Remota_*.AppImage
