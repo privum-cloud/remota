@@ -106,7 +106,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
             {PROTOCOLS.map((p) => (
               <option key={p} value={p}>
                 {p.toUpperCase()}
-                {p === "rdp" || p === "telnet" ? " (coming soon)" : ""}
+                {p === "rdp" ? " (beta)" : p === "telnet" ? " (coming soon)" : ""}
               </option>
             ))}
           </select>

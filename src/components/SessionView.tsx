@@ -1,6 +1,7 @@
 import type { SessionTab } from "../state/useSessions";
 import { VncView } from "../renderers/VncView";
 import { SshView } from "../renderers/SshView";
+import { RdpView } from "../renderers/RdpView";
 import { colors } from "./styles";
 
 export function SessionView({ tab, onDead }: { tab: SessionTab; onDead?: () => void }) {
@@ -24,22 +25,16 @@ export function SessionView({ tab, onDead }: { tab: SessionTab; onDead?: () => v
   }
 
   if (tab.protocol === "rdp") {
+    // RDP (beta): the gateway runs an RDCleanPath proxy; ironrdp-web does CredSSP/NLA.
     return (
-      <div style={{ padding: 24, maxWidth: 580 }}>
-        <p style={{ color: colors.text, fontSize: 15, margin: "0 0 10px" }}>
-          <b>RDP is not available yet</b>
-        </p>
-        <p style={{ color: colors.dim, fontSize: 13, lineHeight: 1.6, margin: "0 0 12px" }}>
-          Remota's RDP support is still in development. The in-app renderer (IronRDP) is wired up,
-          but the gateway side that performs the RDP <b>NLA / CredSSP</b> handshake to the Windows
-          host isn't finished yet — so RDP sessions can't open. This is on the roadmap.
-        </p>
-        <p style={{ color: colors.dim, fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-          <b>SSH works today.</b> RDP, VNC and Telnet share the same architecture and are being
-          rolled out — follow or track progress at{" "}
-          <span style={{ fontFamily: "monospace", color: colors.text }}>github.com/privum-cloud/remota</span>.
-        </p>
-      </div>
+      <RdpView
+        key={tab.epoch}
+        proxyUrl={tab.wsUrl}
+        destination={tab.target}
+        username={tab.username ?? ""}
+        password={tab.password ?? ""}
+        domain={tab.domain}
+      />
     );
   }
 

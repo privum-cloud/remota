@@ -1,3 +1,4 @@
+pub mod rdp;
 pub mod registry;
 pub mod relay;
 pub mod server;

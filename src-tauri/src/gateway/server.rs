@@ -31,6 +31,7 @@ pub fn router(registry: Arc<SessionRegistry>) -> Router {
     Router::new()
         .route("/session/{id}", get(session_handler))
         .route("/ssh/{id}", get(ssh_handler))
+        .route("/rdp/{id}", get(rdp_handler))
         .with_state(registry)
 }
 
@@ -69,6 +70,18 @@ async fn ssh_handler(
             let rows = q.rows.filter(|r| *r > 0).unwrap_or(24);
             ws.on_upgrade(move |socket| crate::gateway::ssh::proxy_ssh(socket, spec, cols, rows))
         }
+        None => StatusCode::UNAUTHORIZED.into_response(),
+    }
+}
+
+async fn rdp_handler(
+    ws: WebSocketUpgrade,
+    Path(id): Path<String>,
+    Query(q): Query<TokenQuery>,
+    State(registry): State<Arc<SessionRegistry>>,
+) -> Response {
+    match registry.consume(&id, &q.token) {
+        Some(spec) => ws.on_upgrade(move |socket| crate::gateway::rdp::proxy_rdp(socket, spec)),
         None => StatusCode::UNAUTHORIZED.into_response(),
     }
 }

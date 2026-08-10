@@ -41,7 +41,16 @@ export function RdpView({ proxyUrl, destination, username, password, domain }: P
       session = await b.connect();
       session.run();
     })().catch((e) => {
-      if (!cancelled) setErr(String(e));
+      if (cancelled) return;
+      // ironrdp's IronError carries a readable backtrace()/message — avoid "[object Object]".
+      const anyE = e as { backtrace?: () => string; message?: string } | undefined;
+      let msg: string;
+      try {
+        msg = anyE?.backtrace?.() || anyE?.message || String(e);
+      } catch {
+        msg = String(e);
+      }
+      setErr(msg);
     });
     return () => {
       cancelled = true;
