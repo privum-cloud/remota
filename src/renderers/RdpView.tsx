@@ -110,18 +110,29 @@ function attachInput(canvas: HTMLCanvasElement, session: Session, signal: AbortS
 
 export function RdpView({ proxyUrl, destination, username, password, domain, onClosed }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let session: Session | undefined;
     let cancelled = false;
     let clipPoll: ReturnType<typeof setInterval> | undefined;
+    let resizeObserver: ResizeObserver | undefined;
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const ac = new AbortController();
     setErr(null);
     (async () => {
       await ensureWasm();
       if (cancelled || !canvasRef.current) return;
       const canvas = canvasRef.current;
+      // Tamanho do desktop = tamanho do painel (largura múltipla de 4, altura par; RDP exige).
+      const measure = () => {
+        const el = containerRef.current;
+        const w = Math.max(320, Math.floor((el?.clientWidth || 1280) / 4) * 4);
+        const h = Math.max(240, Math.floor((el?.clientHeight || 720) / 2) * 2);
+        return { w, h };
+      };
+      const initial = measure();
       const b = new SessionBuilder();
       b.username(username);
       b.password(password);
@@ -129,7 +140,7 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
       b.destination(destination);
       b.proxyAddress(proxyUrl);
       b.authToken("remota"); // o gateway não valida; o WASM exige um token
-      b.desktopSize(new DesktopSize(1280, 720));
+      b.desktopSize(new DesktopSize(initial.w, initial.h));
       b.renderCanvas(canvas);
       b.canvasResizedCallback(() => {});
       b.setCursorStyleCallback(() => {});
@@ -165,6 +176,7 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
         }
       });
       b.extension(new Extension("enable_credssp", true)); // NLA/CredSSP
+      b.extension(new Extension("display_control", true)); // resolução dinâmica (session.resize)
       session = await b.connect();
       if (cancelled) {
         session.shutdown();
@@ -172,6 +184,26 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
       }
       attachInput(canvas, session, ac.signal);
       canvas.focus();
+
+      // Resize dinâmico: pede ao remoto para acompanhar o tamanho do painel (com debounce).
+      let lastW = initial.w;
+      let lastH = initial.h;
+      resizeObserver = new ResizeObserver(() => {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          const { w, h } = measure();
+          if (session && (w !== lastW || h !== lastH)) {
+            lastW = w;
+            lastH = h;
+            try {
+              session.resize(w, h);
+            } catch {
+              /* noop */
+            }
+          }
+        }, 250);
+      });
+      if (containerRef.current) resizeObserver.observe(containerRef.current);
 
       // Local → remote clipboard: proactively announce the OS clipboard to the remote whenever it
       // changes (on focus + a light poll), so pasting inside Windows pulls the text.
@@ -215,6 +247,8 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
       cancelled = true;
       ac.abort();
       if (clipPoll) clearInterval(clipPoll);
+      resizeObserver?.disconnect();
+      if (resizeTimer) clearTimeout(resizeTimer);
       try {
         session?.shutdown();
       } catch {
@@ -224,7 +258,7 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
   }, [proxyUrl, destination, username, password, domain]);
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative", background: "#000" }}>
+    <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative", background: "#000" }}>
       <canvas ref={canvasRef} tabIndex={0} style={{ width: "100%", height: "100%", outline: "none" }} />
       {err && (
         <div
