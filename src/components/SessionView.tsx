@@ -34,6 +34,7 @@ export function SessionView({ tab, onDead }: { tab: SessionTab; onDead?: () => v
         username={tab.username ?? ""}
         password={tab.password ?? ""}
         domain={tab.domain}
+        onClosed={onDead}
       />
     );
   }

@@ -27,6 +27,25 @@ export function SshView({ wsUrl, onClosed }: { wsUrl: string; onClosed?: () => v
     ws.binaryType = "arraybuffer";
     const enc = new TextEncoder();
 
+    // Copy/paste no terminal: Ctrl+Shift+C copia a seleção; Ctrl+Shift+V cola.
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type === "keydown" && e.ctrlKey && e.shiftKey) {
+        if (e.code === "KeyC") {
+          const sel = term.getSelection();
+          if (sel) navigator.clipboard?.writeText(sel).catch(() => {});
+          return false;
+        }
+        if (e.code === "KeyV") {
+          navigator.clipboard
+            ?.readText()
+            .then((t) => { if (t && ws.readyState === WebSocket.OPEN) ws.send(enc.encode(t)); })
+            .catch(() => {});
+          return false;
+        }
+      }
+      return true;
+    });
+
     // Mensagem de controlo (texto/JSON) — distinta dos keystrokes (binário).
     const sendResize = () => {
       if (ws.readyState === WebSocket.OPEN) {
