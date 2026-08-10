@@ -115,6 +115,7 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
   useEffect(() => {
     let session: Session | undefined;
     let cancelled = false;
+    let clipPoll: ReturnType<typeof setInterval> | undefined;
     const ac = new AbortController();
     setErr(null);
     (async () => {
@@ -171,6 +172,28 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
       }
       attachInput(canvas, session, ac.signal);
       canvas.focus();
+
+      // Local → remote clipboard: proactively announce the OS clipboard to the remote whenever it
+      // changes (on focus + a light poll), so pasting inside Windows pulls the text.
+      let lastClip = "";
+      const announceLocalClipboard = async () => {
+        if (!session) return;
+        const text = await clipRead();
+        if (text && text !== lastClip) {
+          lastClip = text;
+          try {
+            const data = new ClipboardData();
+            data.addText("text/plain", text);
+            await session.onClipboardPaste(data);
+          } catch {
+            /* noop */
+          }
+        }
+      };
+      clipPoll = setInterval(announceLocalClipboard, 1000);
+      canvas.addEventListener("focus", announceLocalClipboard, { signal: ac.signal });
+      window.addEventListener("focus", announceLocalClipboard, { signal: ac.signal });
+
       session
         .run()
         .then(() => { if (!cancelled) onClosed?.(); })
@@ -191,6 +214,7 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
     return () => {
       cancelled = true;
       ac.abort();
+      if (clipPoll) clearInterval(clipPoll);
       try {
         session?.shutdown();
       } catch {
