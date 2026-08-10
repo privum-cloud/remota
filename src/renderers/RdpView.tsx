@@ -10,6 +10,7 @@ import init, {
   type ClipboardItem,
   type Session,
 } from "ironrdp-wasm";
+import { clipRead, clipWrite } from "../lib/clipboard";
 
 type Props = {
   proxyUrl: string; // ws:// do gateway, rota /rdp/{id}?token=…
@@ -139,7 +140,7 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
           for (const item of data.items() as ClipboardItem[]) {
             if (item.mimeType().startsWith("text/")) {
               const v = item.value();
-              if (typeof v === "string" && v) navigator.clipboard?.writeText(v).catch(() => {});
+              if (typeof v === "string" && v) clipWrite(v);
               break;
             }
           }
@@ -150,7 +151,7 @@ export function RdpView({ proxyUrl, destination, username, password, domain, onC
       // Remote asks for our clipboard (e.g. before pasting in Windows) → push the local clipboard.
       b.forceClipboardUpdateCallback(async () => {
         try {
-          const text = await navigator.clipboard?.readText();
+          const text = await clipRead();
           const data = new ClipboardData();
           if (text) data.addText("text/plain", text);
           await session?.onClipboardPaste(data);

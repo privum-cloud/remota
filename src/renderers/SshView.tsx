@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import { clipRead, clipWrite } from "../lib/clipboard";
 
 /** Terminal SSH: liga ao WS do gateway (que fala russh ao host) via xterm.js. */
 export function SshView({ wsUrl, onClosed }: { wsUrl: string; onClosed?: () => void }) {
@@ -32,14 +33,11 @@ export function SshView({ wsUrl, onClosed }: { wsUrl: string; onClosed?: () => v
       if (e.type === "keydown" && e.ctrlKey && e.shiftKey) {
         if (e.code === "KeyC") {
           const sel = term.getSelection();
-          if (sel) navigator.clipboard?.writeText(sel).catch(() => {});
+          if (sel) clipWrite(sel);
           return false;
         }
         if (e.code === "KeyV") {
-          navigator.clipboard
-            ?.readText()
-            .then((t) => { if (t && ws.readyState === WebSocket.OPEN) ws.send(enc.encode(t)); })
-            .catch(() => {});
+          clipRead().then((t) => { if (t && ws.readyState === WebSocket.OPEN) ws.send(enc.encode(t)); });
           return false;
         }
       }

@@ -16,6 +16,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             // CryptoProvider (ring) para o rustls 0.23 — usado pelas conexões "relayed" (wss).
             gateway::relay::ensure_crypto_provider();
