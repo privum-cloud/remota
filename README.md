@@ -24,6 +24,9 @@ tunnel through jump hosts, and reach machines behind NAT through **your own rela
 protected by a local encrypted vault. It's for developers, sysadmins, homelabbers, IT teams,
 students — anyone who connects to more than one remote machine.
 
+> 🆕 **New — full RDP support.** Connect to Windows over **RDP with NLA/CredSSP**: screen,
+> keyboard & mouse, clipboard, and dynamic resolution. Grab the [latest release](../../releases/latest).
+
 ## Why Remota
 
 [mRemoteNG](https://mremoteng.org/) is a much-loved multi-protocol connection manager — but it
@@ -43,7 +46,7 @@ vault and self-hosted access to machines behind NAT.
 
 ## Features
 
-- **Multi-protocol** — SSH, RDP, VNC and Telnet, each in its own tab.
+- **Multi-protocol** — SSH and **RDP** (with NLA/CredSSP) in tabs today; VNC and Telnet on the way.
 - **Organized** — folders and subfolders; drag-and-drop; expand/collapse; custom icons.
 - **Credential inheritance** — set a username / password / SSH key / jump host on a folder and
   every connection inside inherits it (override per host).
@@ -119,10 +122,19 @@ for the agent and installer.
 - **Vault** — portable encrypted file (AES-256-GCM + Argon2id).
 - **Relay & agent** — Rust, WSS, outbound-only from the agent; TLS terminated at a reverse proxy.
 
-## Contributing
+## Contributing & feedback
 
-Issues and pull requests are welcome. Remota is a clean-room project — please don't paste code
-from other remote-connection managers.
+Remota is young and moving fast, and **your feedback shapes it** — please don't hesitate to speak up:
+
+- 🐛 **Found a bug, or something doesn't work?**
+  [**Open an issue**](https://github.com/privum-cloud/remota/issues/new) — reports get acted on
+  quickly (RDP support in this release came straight from
+  [#2](https://github.com/privum-cloud/remota/issues/2)).
+- 💡 **Want a feature or another protocol?** Open an issue and tell us what you need.
+- 🔧 **Code?** Pull requests are welcome. Remota is **clean-room** — please don't paste code from
+  other remote-connection managers.
+
+Browse existing issues first: **[github.com/privum-cloud/remota/issues](https://github.com/privum-cloud/remota/issues)**.
 
 ## License
 
