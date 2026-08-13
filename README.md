@@ -27,6 +27,14 @@ students — anyone who connects to more than one remote machine.
 > 🆕 **New — full RDP support.** Connect to Windows over **RDP with NLA/CredSSP**: screen,
 > keyboard & mouse, clipboard, and dynamic resolution. Grab the [latest release](../../releases/latest).
 
+## Demo
+
+<div align="center">
+
+![Remota in action — unlocking the encrypted vault and opening SSH and RDP sessions in tabs](images/remota-demo.gif)
+
+</div>
+
 ## Why Remota
 
 [mRemoteNG](https://mremoteng.org/) is a much-loved multi-protocol connection manager — but it
