@@ -1,0 +1,5 @@
+# flatpak-builder outputs / caches / bundles — regenerable, not versioned
+build-dir/
+repo/
+.flatpak-builder/
+*.flatpak
