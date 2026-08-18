@@ -1,0 +1,17 @@
+pkgbase = remota-bin
+	pkgdesc = Multi-protocol remote connection manager for Linux (SSH, RDP) with an encrypted vault and self-hosted access to machines behind NAT
+	pkgver = 0.1.5
+	pkgrel = 1
+	url = https://github.com/privum-cloud/remota
+	arch = x86_64
+	license = AGPL-3.0-or-later
+	options = !strip
+	depends = webkit2gtk-4.1
+	depends = gtk3
+	provides = remota
+	conflicts = remota
+	noextract = Remota_0.1.5_amd64.deb
+	source = https://github.com/privum-cloud/remota/releases/download/v0.1.5/Remota_0.1.5_amd64.deb
+	sha256sums = 5e29ff9ad8ab262a7b71bb472688fb46997d039ef5724f386e99a609c7645f67
+
+pkgname = remota-bin

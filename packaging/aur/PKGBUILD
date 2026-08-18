@@ -1,0 +1,22 @@
+# Maintainer: Marcio Modeneis <modeneis@privum.cloud>
+pkgname=remota-bin
+pkgver=0.1.5
+pkgrel=1
+pkgdesc="Multi-protocol remote connection manager for Linux (SSH, RDP) with an encrypted vault and self-hosted access to machines behind NAT"
+arch=('x86_64')
+url="https://github.com/privum-cloud/remota"
+license=('AGPL-3.0-or-later')
+depends=('webkit2gtk-4.1' 'gtk3')
+provides=('remota')
+conflicts=('remota')
+options=('!strip')
+source=("https://github.com/privum-cloud/remota/releases/download/v${pkgver}/Remota_${pkgver}_amd64.deb")
+noextract=("Remota_${pkgver}_amd64.deb")
+sha256sums=('5e29ff9ad8ab262a7b71bb472688fb46997d039ef5724f386e99a609c7645f67')
+
+package() {
+    cd "$srcdir"
+    # The upstream .deb already lays files out under /usr, so just unpack it.
+    bsdtar -xf "Remota_${pkgver}_amd64.deb"
+    bsdtar -xf data.tar.gz -C "$pkgdir/"
+}
