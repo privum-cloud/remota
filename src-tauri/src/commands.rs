@@ -5,6 +5,8 @@ use tauri::State;
 
 use crate::gateway::{SessionKind, SessionRegistry, SessionSpec};
 use crate::model::{Document, Gateway, Node, Relay};
+use crate::settings::Settings;
+use crate::update::{delivery, Delivery, RELEASES_URL};
 use crate::vault::{VaultError, VaultManager};
 
 pub struct AppState {
@@ -151,6 +153,37 @@ pub fn import_remota_json(state: State<AppState>, path: String) -> Result<Import
         connections,
         message: format!("{connections} connections imported from Remota JSON."),
     })
+}
+
+/// What Remota may do about a newer version, and whether it is allowed to look.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePolicy {
+    pub delivery: Delivery,
+    pub enabled: bool,
+    pub releases_url: String,
+    pub current_version: String,
+}
+
+/// Read before the vault is unlocked, because that is when it is needed: whoever has not opened
+/// Remota in a month is exactly the person who has not heard about the release that fixed
+/// something, and they should not have to unlock a vault to find out.
+#[tauri::command]
+pub fn update_policy() -> UpdatePolicy {
+    UpdatePolicy {
+        delivery: delivery(),
+        enabled: Settings::load().check_for_updates,
+        releases_url: RELEASES_URL.to_owned(),
+        current_version: env!("CARGO_PKG_VERSION").to_owned(),
+    }
+}
+
+#[tauri::command]
+pub fn set_update_check(enabled: bool) -> Result<bool, String> {
+    let mut s = Settings::load();
+    s.check_for_updates = enabled;
+    s.save()?;
+    Ok(enabled)
 }
 
 #[cfg(test)]
