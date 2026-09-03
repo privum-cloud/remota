@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+    # Feature branches too, so a broken workflow surfaces on the branch that
+    # broke it rather than at merge time.
+    branches: [main, "feat/**", "fix/**", "deps/**", "build/**", "release/**"]
+  pull_request:
+
+jobs:
+  # The desktop app. src-tauri and server are separate cargo workspaces and
+  # neither builds the other, so both need their own job.
+  app:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      # Tauri links against the system webkit; without these the crate does not
+      # build, even though nothing under test touches a window.
+      - name: Install the libraries Tauri links against
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Lint
+        run: cargo clippy --all-targets
+        working-directory: src-tauri
+
+      # The four #[ignore] tests need a live sshd, a live relay or a reachable
+      # Windows host, so they stay out of CI and are run by hand.
+      - name: Test
+        run: cargo test
+        working-directory: src-tauri
+
+  # The self-hosted relay and the agent.
+  server:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - name: Lint
+        run: cargo clippy --all-targets
+        working-directory: server
+      - name: Test
+        run: cargo test
+        working-directory: server
+
+  # npm run build is tsc followed by vite build, so this is the typecheck too.
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
