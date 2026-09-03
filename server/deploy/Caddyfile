@@ -2,24 +2,41 @@
 # Caddy obtains/renews a Let's Encrypt cert automatically and proxies the
 # control (/agent/control) and data (/data/{id}) WebSocket upgrades transparently.
 #
-# Place at /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
+# Place at /etc/caddy/Caddyfile, then:
+#   sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+#   sudo systemctl reload caddy
 # DNS: point relay.privum.cloud (A/AAAA) at this host; open TCP 80 + 443.
+#
+# ⚠️ EDIT TWO THINGS BEFORE GOING LIVE:
+#   1. the site address below, if it is not relay.privum.cloud
+#   2. the @brokering_denied IP range — as shipped it allows nobody, so /session
+#      and /agents answer 403 to everyone (fail closed, by design)
 
 relay.privum.cloud {
 	encode zstd gzip
 
-	# The agent connects to wss://relay.privum.cloud/agent/control
-	# The app connects to  wss://relay.privum.cloud/data/{id}?token=...&role=client
-	reverse_proxy 127.0.0.1:8787
+	# --- Brokering plane: operators only ------------------------------------
+	# POST /session and GET /agents have no authentication of their own yet
+	# (per-user auth is Phase 3): anyone who can reach them can list registered
+	# agents and broker a tunnel to an agent's target_port. So they are gated
+	# here, by source IP.
+	#
+	# REPLACE the placeholder range below with your VPN / office ranges, e.g.
+	#   not remote_ip 10.10.0.0/24 203.0.113.7
+	# The documentation range 192.0.2.0/24 is a deliberate placeholder: leaving
+	# it as-is denies everyone rather than silently exposing the endpoints.
+	@brokering_denied {
+		path /session /session/* /agents /agents/*
+		not remote_ip 192.0.2.0/24
+	}
 
-	# --- MVP security note -------------------------------------------------
-	# POST /session and GET /agents are currently UNAUTHENTICATED: anyone who can
-	# reach this host can broker a tunnel to a registered agent's target_port.
-	# Until per-user auth lands (Phase 3), restrict who can reach the relay, e.g.
-	# only the team VPN / office IPs:
+	# --- Agent + data planes: open ------------------------------------------
+	# /agent/control must stay reachable from anywhere (agents dial out from
+	# behind NAT), and /data/{id} is gated by the single-use per-session token.
 	#
-	#   @notvpn not remote_ip 10.10.0.0/24 <your-office-cidr>
-	#   respond @notvpn 403
-	#
-	# (Agents still need outbound reach; this only gates inbound brokering.)
+	# `route` keeps these in the written order: deny first, then proxy.
+	route {
+		respond @brokering_denied 403
+		reverse_proxy 127.0.0.1:8787
+	}
 }

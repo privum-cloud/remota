@@ -26,9 +26,15 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
   | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install -y caddy
 
-sudo cp Caddyfile /etc/caddy/Caddyfile     # edit the domain if not relay.privum.cloud
+sudo cp Caddyfile /etc/caddy/Caddyfile
+sudoedit /etc/caddy/Caddyfile              # set the domain, and the operator IP allowlist
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy                 # Caddy fetches the Let's Encrypt cert on first hit
 ```
+
+The shipped `Caddyfile` **fails closed**: `POST /session` and `GET /agents` answer `403` until you
+replace the placeholder range (`192.0.2.0/24`) with your VPN / office CIDRs. `/agent/control` and
+`/data/{id}` stay open — agents dial out from behind NAT and must always reach the relay.
 
 ## 3. Install the relay
 
@@ -79,11 +85,17 @@ bridges raw bytes — so a TCP service like `sshd` on the target is reachable th
 
 ## Security (MVP limitations — read before exposing)
 
-- **Enrollment** is a single shared token (`REMOTA_ENROLL_TOKEN`). Rotate it by editing
-  `/etc/remota/relay.env` and `systemctl restart remota-relay`.
-- **`POST /session` and `GET /agents` are unauthenticated.** Anyone who can reach the relay can
-  broker a tunnel to a registered agent's `target_port`. Until per-user auth lands (Phase 3),
-  gate inbound access — e.g. only the team VPN / office IPs (see the commented block in
-  `Caddyfile`). Agents still reach the relay outbound regardless.
-- **Session tokens are single-use** and consumed when the two legs pair.
+- **Enrollment** is a single shared token (`REMOTA_ENROLL_TOKEN`), **required**: the relay refuses
+  to start if it is unset, under 16 characters, or the old `dev-enroll` placeholder. Rotate it by
+  editing `/etc/remota/relay.env` and `systemctl restart remota-relay`.
+- **`POST /session` and `GET /agents` are unauthenticated.** Anyone who can reach them can list
+  registered agents and broker a tunnel to an agent's `target_port`. Until per-user auth lands
+  (Phase 3) they are gated by source IP in `Caddyfile`, which ships denying everyone — set your
+  own allowlist. Agents still reach the relay outbound regardless.
+- **Session tokens are single-use** and consumed when the two legs pair. Reaching the token check
+  at all requires the session's UUIDv4 id, which is only ever sent to the app and the agent.
+  A brokered session whose legs never pair is currently kept until the relay restarts.
+- **Enrollment and session tokens are compared in constant time**, so a failed attempt leaks
+  neither the secret's contents nor its length. There is **no rate limiting** on the WebSocket
+  handshakes yet — put one in front of the relay if it is exposed to the open internet.
 - TLS is handled entirely by Caddy; the relay speaks plain HTTP on loopback.
