@@ -141,6 +141,7 @@ Remota is young and moving fast, and **your feedback shapes it** — please don'
 - 💡 **Want a feature or another protocol?** Open an issue and tell us what you need.
 - 🔧 **Code?** Pull requests are welcome. Remota is **clean-room** — please don't paste code from
   other remote-connection managers.
+- 🔒 **Found a security issue?** Please report it privately — see [`SECURITY.md`](./SECURITY.md).
 
 Browse existing issues first: **[github.com/privum-cloud/remota/issues](https://github.com/privum-cloud/remota/issues)**.
 
