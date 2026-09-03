@@ -1,6 +1,6 @@
 [package]
 name = "remota"
-version = "0.1.6"
+version = "0.1.7"
 description = "Remota — open-source multi-protocol remote connection manager for Linux"
 authors = ["Privum Cloud"]
 license = "AGPL-3.0-only"
