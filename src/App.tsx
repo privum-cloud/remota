@@ -1,7 +1,9 @@
 import { type CSSProperties, type ReactNode, useState } from "react";
 import { useVault } from "./state/useVault";
 import { useSessions } from "./state/useSessions";
+import { useUpdate } from "./lib/useUpdate";
 import { VaultUnlock } from "./components/VaultUnlock";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { ConnectionTree } from "./components/ConnectionTree";
 import { ConnectionEditor } from "./components/ConnectionEditor";
 import { FolderEditor } from "./components/FolderEditor";
@@ -21,12 +23,34 @@ type Editing = { kind: "connection" | "folder"; node: Node | null; parentId: str
 export default function App() {
   const v = useVault();
   const s = useSessions();
+  const u = useUpdate();
   const [editing, setEditing] = useState<Editing>({ kind: "connection", node: null, parentId: null });
   const [active, setActive] = useState<string>("editor");
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Built once and rendered in every branch below — including the locked screen. Whoever has not
+  // opened Remota in a month is exactly the person who has not heard about the release that fixed
+  // something, and they should not have to unlock a vault to find out.
+  const updateBanner = u.policy ? (
+    <UpdateBanner
+      phase={u.phase}
+      delivery={u.policy.delivery}
+      releasesUrl={u.policy.releasesUrl}
+      onInstall={u.install}
+      onDismiss={u.dismiss}
+    />
+  ) : null;
+
   if (v.status === "checking") return <Center>Checking vault…</Center>;
-  if (v.status === "locked") return <VaultUnlock exists={v.exists} error={v.error} onUnlock={v.unlock} />;
+  if (v.status === "locked")
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+        {updateBanner}
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <VaultUnlock exists={v.exists} error={v.error} onUnlock={v.unlock} />
+        </div>
+      </div>
+    );
 
   const selected = editing.node;
   // novo nó vai dentro da pasta selecionada (se houver), senão na raiz.
@@ -181,6 +205,7 @@ export default function App() {
   return (
     <div style={shell}>
       <MenuBar menus={menus} />
+      {updateBanner}
       <div className="tricolore">
         <span style={{ background: "#009246" }} />
         <span style={{ background: "#f4f4f4" }} />

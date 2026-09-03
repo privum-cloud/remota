@@ -58,6 +58,16 @@ export interface Document {
   trash: TrashEntry[];
 }
 
+/** What installing a new version costs the user: nothing, or an administrator password. */
+export type UpdateDelivery = "self_install" | "needs_admin";
+
+export interface UpdatePolicy {
+  delivery: UpdateDelivery;
+  enabled: boolean;
+  releasesUrl: string;
+  currentVersion: string;
+}
+
 // Wrappers tipados dos comandos Tauri (Tauri v2 converte snake_case→camelCase nos args).
 export const vaultApi = {
   exists: () => invoke<boolean>("vault_exists"),
@@ -76,4 +86,6 @@ export const vaultApi = {
     invoke<{ connections: number; message: string }>("export_connections", { path }),
   importRemotaJson: (path: string) =>
     invoke<{ connections: number; message: string }>("import_remota_json", { path }),
+  updatePolicy: () => invoke<UpdatePolicy>("update_policy"),
+  setUpdateCheck: (enabled: boolean) => invoke<boolean>("set_update_check", { enabled }),
 };
