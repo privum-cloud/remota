@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use russh::client::{self, Config, Handle, Handler};
-use russh::keys::key::PublicKey;
+use russh::keys::{PrivateKeyWithHashAlg, PublicKey};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::model::Gateway;
@@ -15,7 +14,6 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncStream for T {}
 
 pub struct AcceptAllHandler;
 
-#[async_trait]
 impl Handler for AcceptAllHandler {
     type Error = russh::Error;
     async fn check_server_key(&mut self, _key: &PublicKey) -> Result<bool, Self::Error> {
@@ -39,11 +37,13 @@ pub async fn connect_jump(gw: &Gateway) -> Result<Handle<AcceptAllHandler>, BoxE
     let ok = if let Some(kp) = &gw.key_path {
         let key = russh::keys::load_secret_key(kp, None)
             .map_err(|e| format!("failed to load jump SSH key {kp}: {e}"))?;
-        jump.authenticate_publickey(user, Arc::new(key)).await?
+        let hash_alg = jump.best_supported_rsa_hash().await?.flatten();
+        jump.authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg))
+            .await?
     } else {
         jump.authenticate_password(user, gw.password.clone().unwrap_or_default()).await?
     };
-    if !ok {
+    if !ok.success() {
         return Err("jump host authentication failed".into());
     }
     Ok(jump)

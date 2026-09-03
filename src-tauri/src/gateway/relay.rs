@@ -332,11 +332,15 @@ mod tests {
                 .await
                 .expect("ssh connect_stream over relay");
         let key = russh::keys::load_secret_key(&key_path, None).expect("load ssh key");
+        let hash_alg = handle.best_supported_rsa_hash().await.expect("rsa hash").flatten();
         let authed = handle
-            .authenticate_publickey(user, Arc::new(key))
+            .authenticate_publickey(
+                user,
+                russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg),
+            )
             .await
             .expect("auth call");
-        assert!(authed, "publickey auth failed (is the key in authorized_keys?)");
+        assert!(authed.success(), "publickey auth failed (is the key in authorized_keys?)");
 
         let mut channel = handle.channel_open_session().await.expect("open session");
         channel.exec(true, "echo remota-ok").await.expect("exec");
