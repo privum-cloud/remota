@@ -1,0 +1,97 @@
+name: release
+
+# Fires on a version tag. Everything below is what used to be a person at a
+# terminal, which meant a release could only happen when that person was free.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  # gh is preinstalled on every runner and reads this.
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  # A draft first, so the build job has somewhere to upload to and a
+  # half-finished release is never visible.
+  draft:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Open a draft release
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "Remota ${GITHUB_REF_NAME#v}" \
+            --draft --generate-notes
+
+  linux:
+    needs: draft
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the libraries Tauri links against
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+
+      # rustup ships with the runner. This workflow produces the binaries people
+      # install; the fewer hands on that path the better.
+      - name: Show the toolchain
+        run: rustc --version && cargo --version
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run tauri build -- --bundles deb,rpm,appimage
+        env:
+          # Without these the bundler still builds, but produces no .sig files
+          # and the manifest step below refuses to publish an empty manifest.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Attach the packages and their signatures
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" --clobber \
+            src-tauri/target/release/bundle/deb/*.deb \
+            src-tauri/target/release/bundle/deb/*.deb.sig \
+            src-tauri/target/release/bundle/rpm/*.rpm \
+            src-tauri/target/release/bundle/rpm/*.rpm.sig \
+            src-tauri/target/release/bundle/appimage/*.AppImage \
+            src-tauri/target/release/bundle/appimage/*.AppImage.sig
+
+  publish:
+    needs: linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      # Installed copies find this file at releases/latest/download/latest.json,
+      # so it has to be attached before the draft is lifted: the moment this
+      # release becomes "latest" is the moment that URL starts resolving here.
+      # Publishing first would leave a window in which installed copies fetch
+      # the previous release's manifest.
+      - name: Build and attach the update manifest
+        run: |
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" --pattern '*.sig' --dir sigs
+          python3 scripts/build-update-manifest.py \
+            --tag "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --sigs sigs --out latest.json
+          gh release upload "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" --clobber latest.json
+
+      - name: Publish
+        run: |
+          gh release edit "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" --draft=false --latest
