@@ -2,6 +2,7 @@ mod commands;
 mod gateway;
 mod importer;
 mod model;
+mod settings;
 mod vault;
 
 use std::sync::Arc;
