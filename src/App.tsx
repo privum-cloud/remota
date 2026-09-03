@@ -197,6 +197,22 @@ export default function App() {
     {
       title: "Help",
       items: [
+        {
+          // A check the user asked for reports the boring answer too; staying silent would look
+          // like the button did nothing.
+          label: "Check for updates now",
+          onClick: async () => {
+            const found = await u.checkNow();
+            if (!found) setNotice("Remota is up to date.");
+          },
+        },
+        {
+          label: u.policy?.enabled
+            ? "✓ Check for updates automatically"
+            : "Check for updates automatically",
+          onClick: () => void u.setEnabled(!u.policy?.enabled),
+        },
+        "sep",
         { label: "About Remota", onClick: () => setNotice("Remota — multi-protocol remote connection manager for Linux. Clean-room, AGPLv3.") },
       ],
     },
