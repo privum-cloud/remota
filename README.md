@@ -69,6 +69,7 @@ vault and self-hosted access to machines behind NAT.
   and follow window resizes.
 - **Recycle bin** — deleting moves items to a Trash you can restore from.
 - **Native & fast** — a small Rust/Tauri binary, not a bundled browser.
+- **Updates itself** — signed releases, checked at launch, with an off switch.
 
 ## Install
 
@@ -113,6 +114,27 @@ npm run tauri dev
 
 First launch asks you to set a **master password** — it encrypts your vault. Then add a
 connection (or import from mRemoteNG) and double-click to open a session.
+
+## Staying up to date
+
+Remota checks for a new release when it starts, and offers to install it. How that install happens
+depends on how you installed Remota:
+
+- **AppImage** — Remota replaces the file itself and restarts. Nothing is asked of you.
+- **`.deb` / `.rpm`** — your package manager owns the files, so the install runs through `pkexec`
+  and your system asks for an administrator password. The banner says so **before** you click, so
+  the prompt is never a surprise.
+
+The check is a single request to GitHub for the release manifest, and it is the only network
+request Remota makes on its own. You can turn it off in **Help → Check for updates automatically**,
+and check by hand from **Help → Check for updates now**. The preference lives in
+`~/.config/remota/settings.json`.
+
+Every package is signed, and Remota installs an update only if the signature matches the key built
+into it.
+
+> Installations of **0.1.6 and earlier** have no updater and cannot be updated automatically —
+> update once from the [Releases](../../releases/latest) page and it is automatic from then on.
 
 ## Reach machines behind NAT (self-hosted)
 
