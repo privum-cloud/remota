@@ -1,17 +1,15 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
 use russh::client::{self, Config, Handler};
-use russh::keys::key::PublicKey;
+use russh::keys::{PrivateKeyWithHashAlg, PublicKey};
 use russh::ChannelMsg;
 
 use crate::gateway::SessionSpec;
 
 struct ClientHandler;
 
-#[async_trait]
 impl Handler for ClientHandler {
     type Error = russh::Error;
 
@@ -79,11 +77,18 @@ async fn run(
                  passphrase-protected keys aren't supported yet."
             )
         })?;
-        handle.authenticate_publickey(username.clone(), Arc::new(key)).await?
+        // RSA keys must say which SHA to sign with; ask the server what it accepts.
+        let hash_alg = handle.best_supported_rsa_hash().await?.flatten();
+        handle
+            .authenticate_publickey(
+                username.clone(),
+                PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg),
+            )
+            .await?
     } else {
         handle.authenticate_password(username.clone(), password).await?
     };
-    if !authed {
+    if !authed.success() {
         let how = if spec.key_path.is_some() { "SSH key" } else { "password" };
         return Err(
             format!("SSH authentication failed for user '{username}' using {how} — check the username and {how}.").into(),

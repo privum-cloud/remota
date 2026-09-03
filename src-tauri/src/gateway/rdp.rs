@@ -60,7 +60,8 @@ async fn run(socket: WebSocket) -> Result<(), BoxErr> {
     // 4) RDCleanPath response: X.224 confirm + server cert chain + resolved address.
     let resp = RDCleanPathPdu::new_response(format!("{host}:{port}"), x224_resp, certs)
         .map_err(|e| format!("build RDCleanPath response: {e}"))?;
-    ws_tx.send(Message::Binary(resp.to_der()?.into())).await?;
+    let resp_der = resp.to_der().map_err(|e| format!("encode RDCleanPath response: {e}"))?;
+    ws_tx.send(Message::Binary(resp_der.into())).await?;
 
     // 5) Relay plaintext RDP bytes: WS <-> TLS (rustls encrypts to the server).
     relay(ws_tx, ws_rx, tls).await;
