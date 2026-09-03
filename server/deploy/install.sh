@@ -39,6 +39,16 @@ if ! sudo test -f /etc/remota/relay.env; then
 	sudo chown remota:remota /etc/remota/relay.env
 	sudo chmod 640 /etc/remota/relay.env
 	echo ">> generated /etc/remota/relay.env with a new enrollment token"
+else
+	# Existing file: the relay refuses to start on a placeholder/short token, so catch it
+	# here instead of leaving a dead service behind a "success" message.
+	EXISTING="$(sudo sed -n 's/^REMOTA_ENROLL_TOKEN=//p' /etc/remota/relay.env | tail -1)"
+	if [[ -z "$EXISTING" || "$EXISTING" == "dev-enroll" || "$EXISTING" == CHANGE_ME* || ${#EXISTING} -lt 16 ]]; then
+		echo "!! /etc/remota/relay.env has no usable REMOTA_ENROLL_TOKEN." >&2
+		echo "   The relay will refuse to start. Set a long random secret:" >&2
+		echo "   head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 40" >&2
+		exit 1
+	fi
 fi
 
 # 5) systemd unit.

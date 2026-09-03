@@ -23,6 +23,8 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -66,6 +68,53 @@ fn relay_text(msg: &RelayMsg) -> Message {
     Message::Text(serde_json::to_string(msg).expect("RelayMsg serializes").into())
 }
 
+// ---- secrets --------------------------------------------------------------
+
+/// The placeholder enrollment secret this relay used to fall back to. It is public knowledge
+/// (it is in the git history and in the docs), so a deployment must never run with it.
+pub const INSECURE_ENROLL_TOKEN: &str = "dev-enroll";
+
+/// Shortest enrollment secret we accept. `install.sh` generates 40 random characters.
+pub const MIN_ENROLL_TOKEN_LEN: usize = 16;
+
+/// Compare two secrets without branching on their contents.
+///
+/// Both operands are hashed to a fixed-size digest first: `ct_eq` over the raw bytes is still
+/// length-dependent, so hashing keeps *both* the contents and the length of the secret out of
+/// the timing. Cheap enough — this runs once per connection attempt, not per byte.
+fn secret_eq(a: &str, b: &str) -> bool {
+    let a = Sha256::digest(a.as_bytes());
+    let b = Sha256::digest(b.as_bytes());
+    a.ct_eq(&b).into()
+}
+
+/// Validate the operator-supplied enrollment secret at startup.
+///
+/// The relay refuses to run without a real one: an unset or placeholder token means any host on
+/// the internet can register an agent, and `/agent/control` is deliberately reachable from
+/// anywhere (agents dial out from behind NAT). Fail loudly at boot rather than quietly serve.
+pub fn validate_enroll_token(value: Option<&str>) -> Result<String, String> {
+    const HOWTO: &str =
+        "Generate one with:  head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 40\n\
+         and set REMOTA_ENROLL_TOKEN (see server/deploy/relay.env.example).";
+    let token = value.unwrap_or("").trim();
+    if token.is_empty() {
+        return Err(format!("REMOTA_ENROLL_TOKEN is not set.\n{HOWTO}"));
+    }
+    if token == INSECURE_ENROLL_TOKEN {
+        return Err(format!(
+            "REMOTA_ENROLL_TOKEN is still the placeholder {INSECURE_ENROLL_TOKEN:?}, which is \
+             publicly known.\n{HOWTO}"
+        ));
+    }
+    if token.chars().count() < MIN_ENROLL_TOKEN_LEN {
+        return Err(format!(
+            "REMOTA_ENROLL_TOKEN is too short (minimum {MIN_ENROLL_TOKEN_LEN} characters).\n{HOWTO}"
+        ));
+    }
+    Ok(token.to_string())
+}
+
 // ---- control channel ------------------------------------------------------
 
 async fn agent_control(ws: WebSocketUpgrade, State(st): State<AppState>) -> Response {
@@ -89,7 +138,9 @@ async fn handle_agent_control(socket: WebSocket, st: AppState) {
             return;
         }
     };
-    if token != *st.enroll_token {
+    // Constant-time: `/agent/control` is open to the internet, so this comparison is the one
+    // attacker-reachable check on a long-lived shared secret.
+    if !secret_eq(&token, &st.enroll_token) {
         let _ = sink.send(relay_text(&RelayMsg::Error { msg: "bad enrollment token".into() })).await;
         return;
     }
@@ -190,7 +241,14 @@ async fn data_channel(
     State(st): State<AppState>,
 ) -> Response {
     // Validate token against the session, but do NOT consume it yet — both legs present it.
-    let valid = matches!(st.sessions.lock().await.get(&id), Some(s) if s.token == q.token);
+    // Reaching the comparison at all requires knowing `id`, a UUIDv4 that only the app and the
+    // agent are told, so this is not an oracle on the token; compare in constant time anyway.
+    // NOTE: a brokered session whose legs never pair is never removed from the map — see the
+    // known-limitations list in SECURITY.md.
+    let valid = match st.sessions.lock().await.get(&id) {
+        Some(s) => secret_eq(&s.token, &q.token),
+        None => false,
+    };
     if !valid {
         return (StatusCode::FORBIDDEN, "bad session or token").into_response();
     }
@@ -202,4 +260,50 @@ async fn data_channel(
     ws.on_upgrade(move |socket| async move {
         rendezvous(&st.rendezvous, &st.sessions, id, role, socket).await;
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn secret_eq_matches_only_identical_secrets() {
+        assert!(secret_eq("s3cret-token", "s3cret-token"));
+        assert!(!secret_eq("s3cret-token", "s3cret-tokeM"));
+        // Length differences must not be treated as a match either.
+        assert!(!secret_eq("s3cret-token", "s3cret-token-longer"));
+        assert!(!secret_eq("", "s3cret-token"));
+        assert!(secret_eq("", ""));
+    }
+
+    #[test]
+    fn enroll_token_must_be_set() {
+        assert!(validate_enroll_token(None).is_err());
+        assert!(validate_enroll_token(Some("")).is_err());
+        assert!(validate_enroll_token(Some("   ")).is_err());
+    }
+
+    #[test]
+    fn enroll_token_rejects_the_public_placeholder() {
+        let err = validate_enroll_token(Some(INSECURE_ENROLL_TOKEN)).unwrap_err();
+        assert!(err.contains("publicly known"), "{err}");
+    }
+
+    #[test]
+    fn enroll_token_rejects_short_secrets() {
+        assert!(validate_enroll_token(Some("short")).is_err());
+        let ok = "x".repeat(MIN_ENROLL_TOKEN_LEN);
+        assert_eq!(validate_enroll_token(Some(&ok)).unwrap(), ok);
+    }
+
+    #[test]
+    fn enroll_token_is_trimmed() {
+        // Env files and shell exports pick up stray whitespace; a token that differs only by
+        // trailing newline must not silently become a *different* secret.
+        let token = "  a-perfectly-fine-enrollment-secret  ";
+        assert_eq!(
+            validate_enroll_token(Some(token)).unwrap(),
+            "a-perfectly-fine-enrollment-secret"
+        );
+    }
 }
