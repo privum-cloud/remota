@@ -27,7 +27,11 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      //
+      // `packaging/` holds build output, not frontend source. The Flatpak builder leaves a
+      // sandbox tree under packaging/flatpak/build-dir containing symlink loops (var/run/udev),
+      // and the watcher dies on them with ELOOP — taking `npm run tauri dev` down with it.
+      ignored: ["**/src-tauri/**", "**/packaging/**"],
     },
   },
 }));
