@@ -23,6 +23,10 @@ export function SshView({ wsUrl, onClosed }: { wsUrl: string; onClosed?: () => v
     term.open(el);
     fit.fit();
 
+    // Guarda contra o onclose de um socket já desmontado (remount por epoch) marcar a
+    // aba recém-reconectada como morta — mesmo padrão de `cancelled` do RdpView.
+    let cancelled = false;
+
     // Abre o WS já com as dimensões reais → o PTY nasce do tamanho certo (k9s/vim ocupam tudo).
     const ws = new WebSocket(`${wsUrl}&cols=${term.cols}&rows=${term.rows}`);
     ws.binaryType = "arraybuffer";
@@ -57,6 +61,7 @@ export function SshView({ wsUrl, onClosed }: { wsUrl: string; onClosed?: () => v
     };
     ws.onopen = () => sendResize(); // garante o PTY alinhado assim que liga
     ws.onclose = () => {
+      if (cancelled) return; // socket de uma montagem anterior: não marcar a aba atual como morta
       term.write("\r\n\x1b[90m[session ended]\x1b[0m\r\n");
       onClosed?.();
     };
@@ -75,6 +80,7 @@ export function SshView({ wsUrl, onClosed }: { wsUrl: string; onClosed?: () => v
     window.addEventListener("resize", refit);
 
     return () => {
+      cancelled = true;
       ro.disconnect();
       window.removeEventListener("resize", refit);
       onData.dispose();
