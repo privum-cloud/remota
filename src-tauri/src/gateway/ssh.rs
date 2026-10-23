@@ -36,12 +36,95 @@ pub async fn proxy_ssh(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u1
     }
 }
 
-async fn run(
-    socket: WebSocket,
-    spec: SessionSpec,
+type SshErr = Box<dyn std::error::Error + Send + Sync>;
+
+async fn run(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u16) -> Result<(), SshErr> {
+    // Toda a fase pré-split (connect/auth/abrir PTY) pode falhar; se falhar, entregamos o
+    // motivo real na aba ANTES de fechar — senão o front só mostra "[session ended]".
+    let (_handle, mut channel, _keepalive) = match connect_and_open(&spec, cols, rows).await {
+        Ok(v) => v,
+        Err(e) => {
+            // O xterm escreve frames de texto literalmente; a string é sempre a nossa
+            // própria format!(...), logo UTF-8 válido (nunca bytes crus do servidor).
+            let mut socket = socket;
+            let _ = socket
+                .send(Message::Text(format!("\r\n\x1b[31m{e}\x1b[0m\r\n").into()))
+                .await;
+            let _ = socket.close().await;
+            return Err(e);
+        }
+    };
+
+    let (mut ws_tx, mut ws_rx) = socket.split();
+
+    loop {
+        tokio::select! {
+            msg = channel.wait() => {
+                match msg {
+                    Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        if ws_tx.send(Message::Binary(data.to_vec().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+                    _ => {}
+                }
+            }
+            ws_msg = ws_rx.next() => {
+                match ws_msg {
+                    Some(Ok(Message::Binary(b))) => {
+                        // Erro a meio da sessão (pós-split): best-effort avisa a aba e sai.
+                        if let Err(e) = channel.data(&b[..]).await {
+                            let _ = ws_tx
+                                .send(Message::Text(format!("\r\n\x1b[31mssh error: {e}\x1b[0m\r\n").into()))
+                                .await;
+                            break;
+                        }
+                    }
+                    Some(Ok(Message::Text(t))) => {
+                        // Texto = controlo (JSON). resize → window_change (SIGWINCH no remoto → k9s/vim redesenham).
+                        match serde_json::from_str::<Ctrl>(&t) {
+                            Ok(c) if c.t == "resize" => {
+                                let w = c.cols.unwrap_or(cols);
+                                let h = c.rows.unwrap_or(rows);
+                                let _ = channel.window_change(w as u32, h as u32, 0, 0).await;
+                            }
+                            _ => {
+                                if let Err(e) = channel.data(t.as_bytes()).await {
+                                    let _ = ws_tx
+                                        .send(Message::Text(format!("\r\n\x1b[31mssh error: {e}\x1b[0m\r\n").into()))
+                                        .await;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let _ = channel.eof().await;
+    Ok(())
+}
+
+/// Faz connect (direto/relay/jump), autentica e abre PTY+shell. Devolve o handle (tem de
+/// ficar vivo durante a sessão), o canal, e o keepalive do jump. Qualquer erro aqui é
+/// pré-split: o `run` entrega-o na aba.
+async fn connect_and_open(
+    spec: &SessionSpec,
     cols: u16,
     rows: u16,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<
+    (
+        client::Handle<ClientHandler>,
+        russh::Channel<client::Msg>,
+        Option<client::Handle<crate::gateway::tunnel::AcceptAllHandler>>,
+    ),
+    SshErr,
+> {
     let username = spec.username.clone().unwrap_or_default();
     let password = spec.password.clone().unwrap_or_default();
 
@@ -95,50 +178,13 @@ async fn run(
         );
     }
 
-    let mut channel = handle.channel_open_session().await?;
+    let channel = handle.channel_open_session().await?;
     channel
         .request_pty(false, "xterm-256color", cols as u32, rows as u32, 0, 0, &[])
         .await?;
     channel.request_shell(true).await?;
 
-    let (mut ws_tx, mut ws_rx) = socket.split();
-
-    loop {
-        tokio::select! {
-            msg = channel.wait() => {
-                match msg {
-                    Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
-                        if ws_tx.send(Message::Binary(data.to_vec().into())).await.is_err() {
-                            break;
-                        }
-                    }
-                    Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
-                    _ => {}
-                }
-            }
-            ws_msg = ws_rx.next() => {
-                match ws_msg {
-                    Some(Ok(Message::Binary(b))) => { channel.data(&b[..]).await?; }
-                    Some(Ok(Message::Text(t))) => {
-                        // Texto = controlo (JSON). resize → window_change (SIGWINCH no remoto → k9s/vim redesenham).
-                        match serde_json::from_str::<Ctrl>(&t) {
-                            Ok(c) if c.t == "resize" => {
-                                let w = c.cols.unwrap_or(cols);
-                                let h = c.rows.unwrap_or(rows);
-                                let _ = channel.window_change(w as u32, h as u32, 0, 0).await;
-                            }
-                            _ => { channel.data(t.as_bytes()).await?; }
-                        }
-                    }
-                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    let _ = channel.eof().await;
-    Ok(())
+    Ok((handle, channel, _jump_keepalive))
 }
 
 /// Separa "host:porta" em (host, porta). Default 22 se faltar/inválida.

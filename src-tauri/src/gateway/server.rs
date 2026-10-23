@@ -175,6 +175,42 @@ mod tests {
         assert!(tokio_tungstenite::connect_async(&url).await.is_err());
     }
 
+    /// Uma sessão SSH que falha antes do pump (aqui: porta morta) tem de entregar o
+    /// erro real como frame de TEXTO na aba, não fechar calada (o front mostraria só
+    /// "[session ended]"). O primeiro frame recebido tem de ser Text e não-vazio.
+    #[tokio::test]
+    async fn ssh_sends_error_frame_before_close_on_connect_failure() {
+        use std::time::Duration; // SessionKind/SessionRegistry/start/Arc já estão no escopo do módulo.
+
+        let reg = Arc::new(SessionRegistry::new());
+        // Porta morta: o connect TCP falha na fase pré-split do run().
+        let spec = reg.create_with_creds(
+            "127.0.0.1:1".into(),
+            SessionKind::Ssh,
+            Some("user".into()),
+            Some("pw".into()),
+            None,
+            None,
+            None,
+        );
+        let port = start(reg.clone()).await;
+        let url = format!(
+            "ws://127.0.0.1:{port}/ssh/{}?token={}&cols=80&rows=24",
+            spec.id, spec.token
+        );
+        let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+
+        let first = tokio::time::timeout(Duration::from_secs(5), ws.next())
+            .await
+            .expect("timed out waiting for the error frame")
+            .expect("socket closed with no frame")
+            .expect("ws error");
+        match first {
+            TMessage::Text(t) => assert!(!t.is_empty(), "error text frame should be non-empty"),
+            other => panic!("expected a Text error frame before close, got {other:?}"),
+        }
+    }
+
     /// Prova (vivo) o fix do tamanho do PTY: o remoto vê as dimensões pedidas no `?cols=&rows=`
     /// e o resize (window_change) propaga. Precisa de sshd local + chave autorizada. Correr:
     ///   SSH_USER=sysadmin SSH_KEY=$HOME/.ssh/id_rsa \
