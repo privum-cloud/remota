@@ -3,7 +3,8 @@ use std::sync::Arc;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
 use russh::client::{self, Config, Handler};
-use russh::keys::{PrivateKeyWithHashAlg, PublicKey};
+use russh::keys::agent::{client::AgentClient, AgentIdentity};
+use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKey};
 use russh::ChannelMsg;
 
 use crate::gateway::SessionSpec;
@@ -179,9 +180,6 @@ async fn connect_and_open(
     ),
     SshErr,
 > {
-    let username = spec.username.clone().unwrap_or_default();
-    let password = spec.password.clone().unwrap_or_default();
-
     let config = Arc::new(Config::default());
 
     // O jump (se houver) tem de ficar vivo durante toda a sessão, senão o túnel fecha.
@@ -206,31 +204,9 @@ async fn connect_and_open(
         client::connect(config.clone(), spec.target.as_str(), ClientHandler).await?
     };
 
-    // Auth: chave SSH se houver key_path, senão password.
-    let authed = if let Some(kp) = &spec.key_path {
-        let key = russh::keys::load_secret_key(kp, None).map_err(|e| {
-            format!(
-                "could not load SSH private key '{kp}': {e}. Use the PRIVATE key (not the .pub file); \
-                 passphrase-protected keys aren't supported yet."
-            )
-        })?;
-        // RSA keys must say which SHA to sign with; ask the server what it accepts.
-        let hash_alg = handle.best_supported_rsa_hash().await?.flatten();
-        handle
-            .authenticate_publickey(
-                username.clone(),
-                PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg),
-            )
-            .await?
-    } else {
-        handle.authenticate_password(username.clone(), password).await?
-    };
-    if !authed.success() {
-        let how = if spec.key_path.is_some() { "SSH key" } else { "password" };
-        return Err(
-            format!("SSH authentication failed for user '{username}' using {how} — check the username and {how}.").into(),
-        );
-    }
+    // RSA keys must say which SHA to sign with; ask the server what it accepts.
+    let hash_alg = handle.best_supported_rsa_hash().await?.flatten();
+    authenticate(&mut handle, spec, hash_alg).await?;
 
     let channel = handle.channel_open_session().await?;
     channel
@@ -239,6 +215,101 @@ async fn connect_and_open(
     channel.request_shell(true).await?;
 
     Ok((handle, channel, _jump_keepalive))
+}
+
+/// Auth cascade: explicit key → ssh-agent (automatic) → saved password. Returns
+/// `Ok` the moment a method succeeds; on exhaustion/disconnect returns a message
+/// naming what was tried (which `run` delivers to the tab). Never `?`-propagates an
+/// auth attempt: a transport drop ends the cascade (MaxAuthTries), a credential
+/// rejection falls through to the next stage.
+async fn authenticate(
+    handle: &mut client::Handle<ClientHandler>,
+    spec: &SessionSpec,
+    hash_alg: Option<HashAlg>,
+) -> Result<(), SshErr> {
+    let user = spec.username.clone().unwrap_or_default();
+    let password = spec.password.as_deref().filter(|p| !p.is_empty()); // Some("") == absent
+    let mut tried: Vec<Tried> = Vec::new();
+
+    // 1) Explicit key. A load failure (encrypted/.pub) spends no sshd attempt -> fall through.
+    let mut key_offered = false;
+    let mut offered_pub: Option<PublicKey> = None; // compared via .key_data() (comment differs)
+    if let Some(kp) = &spec.key_path {
+        match russh::keys::load_secret_key(kp, None) {
+            Ok(key) => {
+                offered_pub = Some(key.public_key().clone());
+                key_offered = true;
+                match handle
+                    .authenticate_publickey(
+                        user.clone(),
+                        PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg),
+                    )
+                    .await
+                {
+                    Ok(r) if r.success() => return Ok(()),
+                    Ok(_) => tried.push(Tried::Key(kp.clone())),
+                    Err(_) => {
+                        tried.push(Tried::Key(kp.clone()));
+                        return Err(auth_failure_message(&user, &tried, true).into());
+                    }
+                }
+            }
+            Err(_) => tried.push(Tried::KeyLoadFailed(kp.clone())),
+        }
+    }
+
+    // 2) ssh-agent (automatic when $SSH_AUTH_SOCK is reachable; silent skip otherwise).
+    match AgentClient::connect_env().await {
+        Err(_) => tried.push(Tried::AgentUnavailable),
+        Ok(mut agent) => {
+            let cap = agent_cap(key_offered, password.is_some());
+            let ids = agent.request_identities().await.unwrap_or_default();
+            let mut offered = 0usize;
+            let mut disconnected = false;
+            for id in ids {
+                if offered >= cap {
+                    break;
+                }
+                let AgentIdentity::PublicKey { key, .. } = id else {
+                    continue; // certs: no authenticate_*_with helper for a cert signer
+                };
+                if offered_pub.as_ref().map(|k| k.key_data()) == Some(key.key_data()) {
+                    continue; // already tried as key_path
+                }
+                offered += 1;
+                match handle
+                    .authenticate_publickey_with(user.clone(), key, hash_alg, &mut agent)
+                    .await
+                {
+                    Ok(r) if r.success() => return Ok(()),
+                    Ok(_) => {}
+                    Err(russh::AgentAuthError::Send(_)) => {
+                        disconnected = true; // the session channel is gone
+                        break;
+                    }
+                    Err(_) => break, // agent died / ssh-add -c denied: stop offering, fall through
+                }
+            }
+            tried.push(Tried::Agent(offered));
+            if disconnected {
+                return Err(auth_failure_message(&user, &tried, true).into());
+            }
+        }
+    }
+
+    // 3) Saved password (only when non-empty).
+    if let Some(pw) = password {
+        match handle.authenticate_password(user.clone(), pw.to_string()).await {
+            Ok(r) if r.success() => return Ok(()),
+            Ok(_) => tried.push(Tried::Password),
+            Err(_) => {
+                tried.push(Tried::Password);
+                return Err(auth_failure_message(&user, &tried, true).into());
+            }
+        }
+    }
+
+    Err(auth_failure_message(&user, &tried, false).into())
 }
 
 /// Separa "host:porta" em (host, porta). Default 22 se faltar/inválida.
