@@ -38,6 +38,55 @@ pub async fn proxy_ssh(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u1
 
 type SshErr = Box<dyn std::error::Error + Send + Sync>;
 
+/// sshd's default MaxAuthTries. The cap below is best-effort: a server set lower
+/// cuts the cascade short, which PR #3 now surfaces as a real error in the tab.
+const MAX_AUTH_TRIES: usize = 6;
+
+/// What the auth cascade attempted, kept so the final error can name each method.
+enum Tried {
+    Key(String),
+    KeyLoadFailed(String),
+    Agent(usize),
+    AgentUnavailable,
+    Password,
+}
+
+/// How many ssh-agent identities to offer: leave one sshd attempt for each
+/// following stage that will actually run, so a saved password stays reachable.
+/// `key_offered` is whether a key was *sent to the server* (a load failure spends
+/// no attempt). Never returns 0 unless both other stages are present — and it
+/// never disables the agent, only trims how many keys it offers.
+fn agent_cap(key_offered: bool, password_present: bool) -> usize {
+    MAX_AUTH_TRIES.saturating_sub(key_offered as usize + password_present as usize)
+}
+
+/// A human message naming every method the cascade tried, with the ssh-add hint
+/// for passphrase-protected keys. `disconnected` switches the tail to name the
+/// likely MaxAuthTries cause when the server dropped the transport mid-cascade.
+fn auth_failure_message(user: &str, tried: &[Tried], disconnected: bool) -> String {
+    let items: Vec<String> = tried
+        .iter()
+        .map(|t| match t {
+            Tried::Key(kp) => format!("key '{kp}'"),
+            Tried::KeyLoadFailed(kp) => format!("key '{kp}' (couldn't load)"),
+            Tried::Agent(1) => "ssh-agent (1 key)".to_string(),
+            Tried::Agent(n) => format!("ssh-agent ({n} keys)"),
+            Tried::AgentUnavailable => "ssh-agent (unavailable)".to_string(),
+            Tried::Password => "password".to_string(),
+        })
+        .collect();
+    let tail = if disconnected {
+        " — the server closed the connection (MaxAuthTries reached?)"
+    } else {
+        ""
+    };
+    format!(
+        "SSH auth failed for '{user}' — tried {}{tail}. Check the credentials; \
+         for a passphrase-protected key, load it into ssh-agent (ssh-add).",
+        items.join(", ")
+    )
+}
+
 async fn run(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u16) -> Result<(), SshErr> {
     // Toda a fase pré-split (connect/auth/abrir PTY) pode falhar; se falhar, entregamos o
     // motivo real na aba ANTES de fechar — senão o front só mostra "[session ended]".
@@ -197,5 +246,65 @@ fn split_host_port(target: &str) -> (String, u16) {
     match target.rsplit_once(':') {
         Some((h, p)) => (h.to_string(), p.parse().unwrap_or(22)),
         None => (target.to_string(), 22),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // sshd MaxAuthTries defaults to 6; each method offered costs one attempt.
+    #[test]
+    fn cap_leaves_one_attempt_for_each_following_stage() {
+        assert_eq!(agent_cap(true, true), 4); // key tried + password to follow
+        assert_eq!(agent_cap(false, false), 6); // agent is the only stage
+        assert_eq!(agent_cap(false, true), 5); // password to follow
+        assert_eq!(agent_cap(true, false), 5); // key already cost one
+    }
+
+    #[test]
+    fn message_lists_everything_tried_with_ssh_add_hint() {
+        let tried = [
+            Tried::Key("~/.ssh/id_rsa".into()),
+            Tried::Agent(3),
+            Tried::Password,
+        ];
+        let m = auth_failure_message("alice", &tried, false);
+        assert!(m.contains("alice"));
+        assert!(m.contains("key '~/.ssh/id_rsa'"));
+        assert!(m.contains("ssh-agent (3 keys)"));
+        assert!(m.contains("password"));
+        assert!(m.contains("ssh-add")); // passphrase hint always present
+        assert!(!m.contains("closed the connection")); // not a disconnect
+    }
+
+    #[test]
+    fn message_omits_password_when_none_was_tried() {
+        let m = auth_failure_message("bob", &[Tried::Agent(1)], false);
+        assert!(m.contains("ssh-agent (1 key)")); // singular
+        assert!(!m.contains(", password"));
+    }
+
+    #[test]
+    fn message_flags_a_key_that_could_not_load() {
+        let m = auth_failure_message(
+            "carol",
+            &[
+                Tried::KeyLoadFailed("~/.ssh/id_ed25519".into()),
+                Tried::AgentUnavailable,
+            ],
+            false,
+        );
+        assert!(m.contains("couldn't load"));
+        assert!(m.contains("ssh-agent (unavailable)"));
+        assert!(m.contains("ssh-add"));
+    }
+
+    #[test]
+    fn message_notes_server_disconnect() {
+        // Server hung up mid-cascade (MaxAuthTries): report the disconnect, not a flat rejection.
+        let m = auth_failure_message("dave", &[Tried::Key("~/.ssh/id_rsa".into())], true);
+        assert!(m.contains("closed the connection"));
+        assert!(m.contains("MaxAuthTries"));
     }
 }
