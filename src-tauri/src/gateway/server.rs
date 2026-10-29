@@ -277,7 +277,7 @@ mod tests {
 
     /// Prova (viva) a auth por ssh-agent: sem key_path e sem password, a sessão só
     /// pode entrar pelo agente. Correr com um agente a segurar uma chave autorizada:
-    ///   eval "$(ssh-agent)"; ssh-add ~/.ssh/id_...   # chave autorizada no sshd local
+    ///   eval "$(ssh-agent)"; ssh-add ~/.ssh/id_...   # chave (idealmente com passphrase) autorizada no sshd local
     ///   SSH_USER=sysadmin cargo test --lib \
     ///     gateway::server::tests::ssh_auth_via_agent -- --ignored --nocapture
     /// Lê SSH_AUTH_SOCK do ambiente — nunca o define (racy + unsafe na edition 2024).
