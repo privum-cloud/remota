@@ -274,4 +274,57 @@ mod tests {
         ws.send(TMessage::Binary(b"stty size\n".to_vec())).await.unwrap();
         assert!(wait_for(&mut ws, "40 120").await, "após resize devia ser 40x120");
     }
+
+    /// Prova (viva) a auth por ssh-agent: sem key_path e sem password, a sessão só
+    /// pode entrar pelo agente. Correr com um agente a segurar uma chave autorizada:
+    ///   eval "$(ssh-agent)"; ssh-add ~/.ssh/id_...   # chave autorizada no sshd local
+    ///   SSH_USER=sysadmin cargo test --lib \
+    ///     gateway::server::tests::ssh_auth_via_agent -- --ignored --nocapture
+    /// Lê SSH_AUTH_SOCK do ambiente — nunca o define (racy + unsafe na edition 2024).
+    #[tokio::test]
+    #[ignore]
+    async fn ssh_auth_via_agent() {
+        use crate::gateway::SessionKind;
+        use std::time::Duration;
+
+        let user = std::env::var("SSH_USER").unwrap_or_else(|_| "sysadmin".into());
+        assert!(std::env::var("SSH_AUTH_SOCK").is_ok(), "start ssh-agent + ssh-add first");
+
+        let reg = Arc::new(SessionRegistry::new());
+        let spec = reg.create_with_creds(
+            "127.0.0.1:22".into(),
+            SessionKind::Ssh,
+            Some(user),
+            None, // sem password
+            None, // sem key_path -> o agente é a única via
+            None,
+            None,
+        );
+        let port = start(reg.clone()).await;
+        let url = format!(
+            "ws://127.0.0.1:{port}/ssh/{}?token={}&cols=80&rows=24",
+            spec.id, spec.token
+        );
+        let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+
+        // Um shell a responder significa auth OK via agente; um frame de texto vermelho é a falha.
+        ws.send(TMessage::Binary(b"echo AGENT_OK\n".to_vec())).await.unwrap();
+        let mut acc = String::new();
+        let got = tokio::time::timeout(Duration::from_secs(8), async {
+            while let Some(Ok(m)) = ws.next().await {
+                match m {
+                    TMessage::Binary(b) => acc.push_str(&String::from_utf8_lossy(&b)),
+                    TMessage::Text(t) => acc.push_str(&t),
+                    _ => {}
+                }
+                if acc.contains("AGENT_OK") {
+                    return true;
+                }
+            }
+            false
+        })
+        .await
+        .unwrap_or(false);
+        assert!(got, "expected a working shell via ssh-agent; got: {acc}");
+    }
 }
