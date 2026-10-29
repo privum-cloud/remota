@@ -29,7 +29,7 @@ struct Ctrl {
     rows: Option<u16>,
 }
 
-/// Conecta via SSH (russh), autentica por password, abre um PTY/shell e relaya
+/// Conecta via SSH (russh), autentica (cascata: chave → ssh-agent → password), abre um PTY/shell e relaya
 /// os bytes do canal <-> WebSocket (xterm.js no front). `cols`/`rows` = tamanho inicial do PTY.
 pub async fn proxy_ssh(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u16) {
     if let Err(e) = run(socket, spec, cols, rows).await {
@@ -46,7 +46,7 @@ const MAX_AUTH_TRIES: usize = 6;
 /// What the auth cascade attempted, kept so the final error can name each method.
 enum Tried {
     Key(String),
-    KeyLoadFailed(String),
+    KeyLoadFailed(String, String), // (path, why) — surface the real reason, don't drop it
     Agent(usize),
     AgentUnavailable,
     Password,
@@ -55,8 +55,8 @@ enum Tried {
 /// How many ssh-agent identities to offer: leave one sshd attempt for each
 /// following stage that will actually run, so a saved password stays reachable.
 /// `key_offered` is whether a key was *sent to the server* (a load failure spends
-/// no attempt). Never returns 0 unless both other stages are present — and it
-/// never disables the agent, only trims how many keys it offers.
+/// no attempt). With MAX_AUTH_TRIES=6 this is at least 4; it only trims the agent's
+/// share, never disabling it.
 fn agent_cap(key_offered: bool, password_present: bool) -> usize {
     MAX_AUTH_TRIES.saturating_sub(key_offered as usize + password_present as usize)
 }
@@ -69,7 +69,9 @@ fn auth_failure_message(user: &str, tried: &[Tried], disconnected: bool) -> Stri
         .iter()
         .map(|t| match t {
             Tried::Key(kp) => format!("key '{kp}'"),
-            Tried::KeyLoadFailed(kp) => format!("key '{kp}' (couldn't load)"),
+            Tried::KeyLoadFailed(kp, why) => {
+                format!("key '{kp}' (couldn't load: {why}; use the private key file, not the .pub)")
+            }
             Tried::Agent(1) => "ssh-agent (1 key)".to_string(),
             Tried::Agent(n) => format!("ssh-agent ({n} keys)"),
             Tried::AgentUnavailable => "ssh-agent (unavailable)".to_string(),
@@ -204,9 +206,7 @@ async fn connect_and_open(
         client::connect(config.clone(), spec.target.as_str(), ClientHandler).await?
     };
 
-    // RSA keys must say which SHA to sign with; ask the server what it accepts.
-    let hash_alg = handle.best_supported_rsa_hash().await?.flatten();
-    authenticate(&mut handle, spec, hash_alg).await?;
+    authenticate(&mut handle, spec).await?;
 
     let channel = handle.channel_open_session().await?;
     channel
@@ -217,19 +217,39 @@ async fn connect_and_open(
     Ok((handle, channel, _jump_keepalive))
 }
 
+/// The server's preferred RSA signing hash. `best_supported_rsa_hash` first waits
+/// for the server's EXT_INFO (a hard ~1s timeout), so it's computed lazily — only a
+/// publickey stage needs it, and a password-only login to a server that never sends
+/// EXT_INFO must not pay that wait. Memoized; a negotiation error is non-fatal (no
+/// RSA hash hint, so auth just falls through to the next method).
+async fn rsa_hash_for(
+    handle: &client::Handle<ClientHandler>,
+    memo: &mut Option<Option<HashAlg>>,
+) -> Option<HashAlg> {
+    if let Some(h) = memo {
+        return *h;
+    }
+    let h = handle.best_supported_rsa_hash().await.ok().flatten().flatten();
+    *memo = Some(h);
+    h
+}
+
 /// Auth cascade: explicit key → ssh-agent (automatic) → saved password. Returns
 /// `Ok` the moment a method succeeds; on exhaustion/disconnect returns a message
 /// naming what was tried (which `run` delivers to the tab). Never `?`-propagates an
 /// auth attempt: a transport drop ends the cascade (MaxAuthTries), a credential
 /// rejection falls through to the next stage.
+/// (russh maps a closed reply channel to `Ok(Failure)`, not `Err`, so a disconnect
+/// can also look like a rejection; the next stage's send then fails fast as `Err`,
+/// so at worst one no-op attempt is wasted — never a hang or a false success.)
 async fn authenticate(
     handle: &mut client::Handle<ClientHandler>,
     spec: &SessionSpec,
-    hash_alg: Option<HashAlg>,
 ) -> Result<(), SshErr> {
     let user = spec.username.clone().unwrap_or_default();
     let password = spec.password.as_deref().filter(|p| !p.is_empty()); // Some("") == absent
     let mut tried: Vec<Tried> = Vec::new();
+    let mut rsa_hash: Option<Option<HashAlg>> = None; // lazy, memoized (see rsa_hash_for)
 
     // 1) Explicit key. A load failure (encrypted/.pub) spends no sshd attempt -> fall through.
     let mut key_offered = false;
@@ -239,10 +259,11 @@ async fn authenticate(
             Ok(key) => {
                 offered_pub = Some(key.public_key().clone());
                 key_offered = true;
+                let ha = rsa_hash_for(handle, &mut rsa_hash).await;
                 match handle
                     .authenticate_publickey(
                         user.clone(),
-                        PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg),
+                        PrivateKeyWithHashAlg::new(Arc::new(key), ha),
                     )
                     .await
                 {
@@ -254,7 +275,7 @@ async fn authenticate(
                     }
                 }
             }
-            Err(_) => tried.push(Tried::KeyLoadFailed(kp.clone())),
+            Err(e) => tried.push(Tried::KeyLoadFailed(kp.clone(), e.to_string())),
         }
     }
 
@@ -277,8 +298,9 @@ async fn authenticate(
                     continue; // already tried as key_path
                 }
                 offered += 1;
+                let ha = rsa_hash_for(handle, &mut rsa_hash).await;
                 match handle
-                    .authenticate_publickey_with(user.clone(), key, hash_alg, &mut agent)
+                    .authenticate_publickey_with(user.clone(), key, ha, &mut agent)
                     .await
                 {
                     Ok(r) if r.success() => return Ok(()),
@@ -361,12 +383,14 @@ mod tests {
         let m = auth_failure_message(
             "carol",
             &[
-                Tried::KeyLoadFailed("~/.ssh/id_ed25519".into()),
+                Tried::KeyLoadFailed("~/.ssh/id_ed25519.pub".into(), "unsupported key format".into()),
                 Tried::AgentUnavailable,
             ],
             false,
         );
         assert!(m.contains("couldn't load"));
+        assert!(m.contains("unsupported key format")); // real reason surfaced, not dropped
+        assert!(m.contains(".pub")); // keep the "use the private key, not the .pub" steer
         assert!(m.contains("ssh-agent (unavailable)"));
         assert!(m.contains("ssh-add"));
     }
