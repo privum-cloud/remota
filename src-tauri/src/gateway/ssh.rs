@@ -57,6 +57,9 @@ async fn run(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u16) -> Resu
 
     let (mut ws_tx, mut ws_rx) = socket.split();
 
+    // Erro pós-split: além de avisar a aba, tem de voltar ao `proxy_ssh` p/ ir ao journal.
+    let mut exit: Result<(), SshErr> = Ok(());
+
     loop {
         tokio::select! {
             msg = channel.wait() => {
@@ -73,11 +76,12 @@ async fn run(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u16) -> Resu
             ws_msg = ws_rx.next() => {
                 match ws_msg {
                     Some(Ok(Message::Binary(b))) => {
-                        // Erro a meio da sessão (pós-split): best-effort avisa a aba e sai.
+                        // Erro a meio da sessão (pós-split): avisa a aba e propaga ao journal.
                         if let Err(e) = channel.data(&b[..]).await {
                             let _ = ws_tx
                                 .send(Message::Text(format!("\r\n\x1b[31mssh error: {e}\x1b[0m\r\n").into()))
                                 .await;
+                            exit = Err(e.into());
                             break;
                         }
                     }
@@ -94,6 +98,7 @@ async fn run(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u16) -> Resu
                                     let _ = ws_tx
                                         .send(Message::Text(format!("\r\n\x1b[31mssh error: {e}\x1b[0m\r\n").into()))
                                         .await;
+                                    exit = Err(e.into());
                                     break;
                                 }
                             }
@@ -107,7 +112,7 @@ async fn run(socket: WebSocket, spec: SessionSpec, cols: u16, rows: u16) -> Resu
     }
 
     let _ = channel.eof().await;
-    Ok(())
+    exit
 }
 
 /// Faz connect (direto/relay/jump), autentica e abre PTY+shell. Devolve o handle (tem de
