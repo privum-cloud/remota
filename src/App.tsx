@@ -3,6 +3,7 @@ import { useVault } from "./state/useVault";
 import { useSessions } from "./state/useSessions";
 import { useUpdate } from "./lib/useUpdate";
 import { VaultUnlock } from "./components/VaultUnlock";
+import { PasswordPrompt } from "./components/PasswordPrompt";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { ConnectionTree } from "./components/ConnectionTree";
 import { ConnectionEditor } from "./components/ConnectionEditor";
@@ -27,6 +28,10 @@ export default function App() {
   const [editing, setEditing] = useState<Editing>({ kind: "connection", node: null, parentId: null });
   const [active, setActive] = useState<string>("editor");
   const [notice, setNotice] = useState<string | null>(null);
+  // Connect-time password prompt (connections with always_prompt). Resolves with the typed
+  // password, or null if cancelled. The value is handed straight to the session, never stored.
+  const [pwPrompt, setPwPrompt] = useState<{ name: string; resolve: (pw: string | null) => void } | null>(null);
+  const promptPassword = (name: string) => new Promise<string | null>((resolve) => setPwPrompt({ name, resolve }));
 
   // Built once and rendered in every branch below — including the locked screen. Whoever has not
   // opened Remota in a month is exactly the person who has not heard about the release that fixed
@@ -93,6 +98,12 @@ export default function App() {
     if (!found) return;
     const eff = resolveCreds(found.chain, found.node.conn);
     const gw = resolveGateway(found.gateways, found.node.conn);
+    let password = eff.password;
+    if (found.node.conn.always_prompt) {
+      const typed = await promptPassword(found.node.name);
+      if (typed === null) return; // cancelled → abort the open, no tab
+      password = typed; // use the typed password; ignore any inherited/resolved one
+    }
     const newId = await s.openSession({
       connId: id,
       title: found.node.name,
@@ -100,7 +111,7 @@ export default function App() {
       host: found.node.conn.host,
       port: found.node.conn.port,
       username: eff.username,
-      password: eff.password,
+      password,
       keyPath: eff.key_path,
       domain: eff.domain,
       gateway: gw,
@@ -287,6 +298,14 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {pwPrompt && (
+        <PasswordPrompt
+          name={pwPrompt.name}
+          onSubmit={(pw) => { pwPrompt.resolve(pw); setPwPrompt(null); }}
+          onCancel={() => { pwPrompt.resolve(null); setPwPrompt(null); }}
+        />
+      )}
 
       <footer style={statusbar}>
         <span style={{ color: "#7ee787" }}>● vault unlocked</span>
