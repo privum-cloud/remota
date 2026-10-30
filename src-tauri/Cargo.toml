@@ -37,7 +37,7 @@ aes-gcm = "0.10"
 getrandom = "0.2"
 zeroize = "1"
 dirs = "5"
-russh = { version = "0.62", default-features = false, features = ["ring", "flate2", "rsa"] }
+russh = { version = "0.63", default-features = false, features = ["ring", "flate2", "rsa"] }
 # Relay client (conexão "relayed" através do remota-relay): wss + TLS por rustls/ring.
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
