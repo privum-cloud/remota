@@ -61,6 +61,11 @@ pub struct Connection {
     /// Relay self-hosted (NAT traversal). Se presente, a sessão vai pelo túnel do relay.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relay: Option<Relay>,
+    /// Pedir a password na hora de conectar, em vez de a guardar/herdar da pasta.
+    /// `default` p/ cofres antigos deserializarem. Fica em `Connection` (não `Credentials`)
+    /// de propósito: assim não herda por pasta e uma password de pasta não volta a entrar.
+    #[serde(default)]
+    pub always_prompt: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -181,6 +186,7 @@ mod tests {
             credentials: Credentials::default(),
             gateway: None,
             relay: None,
+            always_prompt: false,
         }
     }
 
@@ -247,5 +253,21 @@ mod tests {
         assert!(doc.remove("c1"));
         assert!(doc.find("c1").is_none());
         assert!(!doc.remove("c1"));
+    }
+
+    #[test]
+    fn deserializes_missing_always_prompt_as_false() {
+        // Old vaults have no always_prompt key — serde default must make it false.
+        let j = r#"{"protocol":"ssh","host":"h","credentials":{}}"#;
+        let c: Connection = serde_json::from_str(j).unwrap();
+        assert!(!c.always_prompt);
+    }
+
+    #[test]
+    fn always_prompt_roundtrips_true() {
+        let mut c = sample_conn("h");
+        c.always_prompt = true;
+        let back: Connection = serde_json::from_slice(&serde_json::to_vec(&c).unwrap()).unwrap();
+        assert!(back.always_prompt);
     }
 }

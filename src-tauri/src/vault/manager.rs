@@ -197,6 +197,7 @@ mod tests {
                 credentials: Credentials::default(),
                 gateway: None,
                 relay: None,
+                always_prompt: false,
             },
         }
     }
