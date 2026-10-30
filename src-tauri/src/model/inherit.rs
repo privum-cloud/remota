@@ -23,6 +23,7 @@ pub fn resolve_effective(folder_chain: &[Credentials], conn: &Connection) -> Con
         credentials: effective,
         gateway: conn.gateway.clone(),
         relay: conn.relay.clone(),
+        always_prompt: conn.always_prompt,
     }
 }
 
@@ -63,11 +64,27 @@ mod tests {
             credentials: creds(Some("administrator"), None, None),
             gateway: None,
             relay: None,
+            always_prompt: false,
         };
         let eff = resolve_effective(&chain, &conn);
         assert_eq!(eff.credentials.username.as_deref(), Some("administrator"));
         assert_eq!(eff.credentials.password.as_deref(), Some("segredo"));
         assert_eq!(eff.credentials.domain.as_deref(), Some("CORP"));
         assert_eq!(eff.host, "win");
+    }
+
+    #[test]
+    fn resolve_preserves_always_prompt() {
+        let conn = Connection {
+            protocol: Protocol::Ssh,
+            host: "h".into(),
+            port: None,
+            credentials: Credentials::default(),
+            gateway: None,
+            relay: None,
+            always_prompt: true,
+        };
+        let eff = resolve_effective(&[], &conn);
+        assert!(eff.always_prompt);
     }
 }

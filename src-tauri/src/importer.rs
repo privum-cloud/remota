@@ -51,6 +51,7 @@ fn parse_children(parent: roxmltree::Node) -> Vec<Node> {
                     credentials: Credentials { username, password: None, domain, key_path: None },
                     gateway: None,
                     relay: None,
+                    always_prompt: false,
                 },
             });
         }

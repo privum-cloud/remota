@@ -32,6 +32,8 @@ export interface Connection {
   credentials: Credentials;
   gateway?: Gateway;
   relay?: Relay;
+  /** Ask for the password at connect time instead of storing/inheriting one. */
+  always_prompt?: boolean;
 }
 
 // Enum internamente-tageado (#[serde(tag = "type")]) do Rust.
