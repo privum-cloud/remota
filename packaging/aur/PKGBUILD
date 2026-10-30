@@ -1,6 +1,6 @@
 # Maintainer: Marcio Modeneis <modeneis@privum.cloud>
 pkgname=remota-bin
-pkgver=0.1.6
+pkgver=0.1.10
 pkgrel=1
 pkgdesc="Multi-protocol remote connection manager for Linux (SSH, RDP) with an encrypted vault and self-hosted access to machines behind NAT"
 arch=('x86_64')
@@ -12,7 +12,7 @@ conflicts=('remota')
 options=('!strip')
 source=("https://github.com/privum-cloud/remota/releases/download/v${pkgver}/Remota_${pkgver}_amd64.deb")
 noextract=("Remota_${pkgver}_amd64.deb")
-sha256sums=('f66bb944cc3c1a147a3110502107f3b7fb1470df816952f21122d21bc5518087')
+sha256sums=('db5e6de106ecaae8ce9f616e89628127c3e9e76439132f46ce9855a32e6fb659')
 
 package() {
     cd "$srcdir"
