@@ -27,6 +27,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
   const [gw, setGw] = useState<GwForm>(emptyGw);
   const [relayUrl, setRelayUrl] = useState("");
   const [relayAgentId, setRelayAgentId] = useState("");
+  const [alwaysPrompt, setAlwaysPrompt] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -43,6 +44,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
     setGw(gwFromModel(e?.conn.gateway));
     setRelayUrl(e?.conn.relay?.url ?? "");
     setRelayAgentId(e?.conn.relay?.agent_id ?? "");
+    setAlwaysPrompt(e?.conn.always_prompt ?? false);
     setSaved(false);
   }, [node]);
 
@@ -61,7 +63,8 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
           port: port ? Number(port) : undefined,
           credentials: {
             username: username || undefined,
-            password: password || undefined,
+            // Toggle on → don't persist a password; it's prompted at connect time.
+            password: alwaysPrompt ? undefined : password || undefined,
             domain: domain || undefined,
             key_path: keyPath || undefined,
           },
@@ -70,6 +73,7 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
             relayUrl.trim() && relayAgentId.trim()
               ? { url: relayUrl.trim(), agent_id: relayAgentId.trim() }
               : undefined,
+          always_prompt: alwaysPrompt,
         },
       };
       await onSave(built);
@@ -132,10 +136,21 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
           <input
             style={input}
             type="password"
-            value={password}
+            value={alwaysPrompt ? "" : password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="password"
+            placeholder={alwaysPrompt ? "asked at connect time" : "password"}
+            disabled={alwaysPrompt}
           />
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: colors.dim, cursor: "pointer" }}>
+            <input type="checkbox" checked={alwaysPrompt} onChange={(e) => setAlwaysPrompt(e.target.checked)} />
+            Always ask for the password at connect time
+          </label>
+          {alwaysPrompt && (
+            <div style={{ fontSize: 11, color: "#8b949e" }}>
+              The password is asked each time you connect and never stored. SSH key passphrases
+              are handled by ssh-agent, not this prompt.
+            </div>
+          )}
           {isRdp && (
             <input style={input} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="domain (RDP)" />
           )}
