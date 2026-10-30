@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use russh::client::{self, Config, Handle, Handler};
-use russh::keys::{PrivateKeyWithHashAlg, PublicKey};
+use russh::keys::{PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::model::Gateway;
@@ -16,7 +16,7 @@ pub struct AcceptAllHandler;
 
 impl Handler for AcceptAllHandler {
     type Error = russh::Error;
-    async fn check_server_key(&mut self, _key: &PublicKey) -> Result<bool, Self::Error> {
+    async fn check_server_key(&mut self, _key: &PublicKeyOrCertificate) -> Result<bool, Self::Error> {
         Ok(true) // homelab/dev — known_hosts é melhoria futura
     }
 }

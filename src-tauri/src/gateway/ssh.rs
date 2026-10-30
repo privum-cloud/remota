@@ -4,7 +4,7 @@ use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
 use russh::client::{self, Config, Handler};
 use russh::keys::agent::{client::AgentClient, AgentIdentity};
-use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKey};
+use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKey, PublicKeyOrCertificate};
 use russh::ChannelMsg;
 
 use crate::gateway::SessionSpec;
@@ -14,7 +14,7 @@ struct ClientHandler;
 impl Handler for ClientHandler {
     type Error = russh::Error;
 
-    async fn check_server_key(&mut self, _server_public_key: &PublicKey) -> Result<bool, Self::Error> {
+    async fn check_server_key(&mut self, _server_public_key: &PublicKeyOrCertificate) -> Result<bool, Self::Error> {
         // Homelab/dev: aceita qualquer chave de host. (known_hosts = melhoria futura.)
         Ok(true)
     }
