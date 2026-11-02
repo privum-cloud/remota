@@ -152,13 +152,33 @@ pub fn export_connections(state: State<AppState>, path: String) -> Result<Import
 /// here, on the machine that still holds the data. The live vault write path is untouched.
 fn write_encrypted_export(path: &Path, password: &str, doc: &Document) -> Result<(), VaultError> {
     let json = serde_json::to_vec(doc).map_err(|e| VaultError::Io(e.to_string()))?;
-    save_document(path, password, KdfParams::default(), &json)?;
-    let back = load_document(path, password)?;
-    if back != json {
-        let _ = std::fs::remove_file(path);
-        return Err(VaultError::Io("export verification failed".into()));
+    // Seal to a sibling temp file and verify it round-trips, THEN atomically rename it into
+    // place. A failed or torn write never leaves a partial file at `path`, and never truncates
+    // an existing file there — `path` only ever receives a fully-verified export. The live
+    // vault write path (`save_document`) is untouched.
+    let tmp = {
+        let mut s = path.as_os_str().to_owned();
+        s.push(".tmp");
+        std::path::PathBuf::from(s)
+    };
+    let sealed = (|| -> Result<(), VaultError> {
+        save_document(&tmp, password, KdfParams::default(), &json)?;
+        let back = load_document(&tmp, password)?;
+        if back != json {
+            return Err(VaultError::Io("export verification failed".into()));
+        }
+        Ok(())
+    })();
+    match sealed {
+        Ok(()) => std::fs::rename(&tmp, path).map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            VaultError::Io(e.to_string())
+        }),
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            Err(e)
+        }
     }
-    Ok(())
 }
 
 /// Exporta a árvore de conexões ENCRIPTADA, protegida por uma password própria (independente
@@ -437,5 +457,28 @@ mod tests {
             decode_remota_import(&bytes, Some("P")),
             Err(VaultError::Crypto)
         ));
+    }
+
+    #[test]
+    fn write_encrypted_export_preserves_destination_on_failure() {
+        let path = tmp_export("atomic-dest");
+        std::fs::write(&path, b"SENTINEL-do-not-clobber").unwrap();
+        // Force the seal step to fail: put a directory where the temp file must be written.
+        let tmp = {
+            let mut s = path.clone().into_os_string();
+            s.push(".tmp");
+            std::path::PathBuf::from(s)
+        };
+        let _ = std::fs::remove_dir_all(&tmp); // clean any leftover from an aborted run
+        let _ = std::fs::remove_file(&tmp);
+        std::fs::create_dir(&tmp).unwrap();
+
+        let res = write_encrypted_export(&path, "P", &doc_with_password("x"));
+        assert!(res.is_err(), "export must fail when it cannot write its temp file");
+        // A failed export must not touch the destination — no partial write, no clobber.
+        assert_eq!(std::fs::read(&path).unwrap(), b"SENTINEL-do-not-clobber");
+
+        std::fs::remove_dir_all(&tmp).ok();
+        std::fs::remove_file(&path).ok();
     }
 }
