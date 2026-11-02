@@ -61,6 +61,7 @@ pub fn run() {
             commands::empty_trash,
             commands::import_mremoteng,
             commands::export_connections,
+            commands::export_connections_encrypted,
             commands::import_remota_json,
             commands::update_policy,
             commands::set_update_check

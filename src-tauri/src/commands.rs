@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -7,7 +8,7 @@ use crate::gateway::{SessionKind, SessionRegistry, SessionSpec};
 use crate::model::{Document, Gateway, Node, Relay};
 use crate::settings::Settings;
 use crate::update::{delivery, Delivery, RELEASES_URL};
-use crate::vault::{VaultError, VaultManager};
+use crate::vault::{load_document, save_document, KdfParams, VaultError, VaultManager};
 
 pub struct AppState {
     pub registry: Arc<SessionRegistry>,
@@ -143,6 +144,38 @@ pub fn export_connections(state: State<AppState>, path: String) -> Result<Import
     })
 }
 
+/// Seal the connection tree to `path` with its own `password` (vault format: AES-256-GCM +
+/// Argon2id), then re-read and decrypt it to prove the write landed intact. A torn write
+/// leaves a file that still sniffs as encrypted and fails only on a later import — catch it
+/// here, on the machine that still holds the data. The live vault write path is untouched.
+fn write_encrypted_export(path: &Path, password: &str, doc: &Document) -> Result<(), VaultError> {
+    let json = serde_json::to_vec(doc).map_err(|e| VaultError::Io(e.to_string()))?;
+    save_document(path, password, KdfParams::default(), &json)?;
+    let back = load_document(path, password)?;
+    if back != json {
+        let _ = std::fs::remove_file(path);
+        return Err(VaultError::Io("export verification failed".into()));
+    }
+    Ok(())
+}
+
+/// Exporta a árvore de conexões ENCRIPTADA, protegida por uma password própria (independente
+/// da senha-mestra). Contraparte segura de `export_connections` (que grava JSON em claro).
+#[tauri::command]
+pub fn export_connections_encrypted(
+    state: State<AppState>,
+    path: String,
+    password: String,
+) -> Result<ImportReport, VaultError> {
+    let doc = state.vault.tree()?;
+    write_encrypted_export(Path::new(&path), &password, &doc)?;
+    let connections = crate::importer::count_connections(&doc.nodes);
+    Ok(ImportReport {
+        connections,
+        message: format!("{connections} connections exported to {path} (encrypted)."),
+    })
+}
+
 /// Reimporta um JSON exportado pelo Remota (merge na raiz).
 #[tauri::command]
 pub fn import_remota_json(state: State<AppState>, path: String) -> Result<ImportReport, VaultError> {
@@ -246,5 +279,81 @@ mod tests {
             build_ws_url(7000, &spec),
             "ws://127.0.0.1:7000/rdp/xyz?token=t2"
         );
+    }
+
+    use crate::model::{Connection, Credentials, Protocol};
+    use crate::vault::file::{is_encrypted, load_document};
+
+    fn tmp_export(name: &str) -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!("remota-export-{name}.dat"));
+        let _ = std::fs::remove_file(&p);
+        p
+    }
+
+    fn doc_with_password(pw: &str) -> Document {
+        Document {
+            nodes: vec![Node::Connection {
+                id: "c1".into(),
+                name: "web".into(),
+                conn: Connection {
+                    protocol: Protocol::Ssh,
+                    host: "10.0.0.1".into(),
+                    port: None,
+                    credentials: Credentials {
+                        username: Some("root".into()),
+                        password: Some(pw.into()),
+                        ..Default::default()
+                    },
+                    gateway: None,
+                    relay: None,
+                    always_prompt: false,
+                },
+            }],
+            trash: vec![],
+        }
+    }
+
+    #[test]
+    fn write_encrypted_export_roundtrips() {
+        let path = tmp_export("roundtrip");
+        let doc = doc_with_password("pw-secret");
+        write_encrypted_export(&path, "P", &doc).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(is_encrypted(&bytes), "exported file must be encrypted");
+        let plain = load_document(&path, "P").unwrap();
+        assert_eq!(plain, serde_json::to_vec(&doc).unwrap(), "decrypts to the same tree");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn write_encrypted_export_hides_cleartext() {
+        let path = tmp_export("hide");
+        let doc = doc_with_password("hunter2-secret");
+        write_encrypted_export(&path, "P", &doc).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let needle = b"hunter2-secret";
+        assert!(
+            !bytes.windows(needle.len()).any(|w| w == needle),
+            "the password must not appear in cleartext in the exported bytes"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn write_encrypted_export_rejects_tampered_file() {
+        let path = tmp_export("tamper");
+        let doc = doc_with_password("pw");
+        write_encrypted_export(&path, "P", &doc).unwrap();
+        // Flip a byte in the ciphertext region (past the 41-byte header).
+        let mut bytes = std::fs::read(&path).unwrap();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xFF;
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(
+            matches!(load_document(&path, "P"), Err(VaultError::Crypto)),
+            "a corrupt ciphertext must fail to decrypt"
+        );
+        std::fs::remove_file(&path).ok();
     }
 }
