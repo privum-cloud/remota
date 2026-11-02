@@ -49,6 +49,18 @@ export function findNode(doc: Document, id: string): Node | null {
   return walk(doc.nodes);
 }
 
+/** A display copy of the tree sorted by name: folders first, then connections, each group
+ *  alphabetical (case-insensitive). Recurses into folders. The stored order is left untouched
+ *  — this is a view transform only, so turning the sort off restores the manual arrangement. */
+export function sortTreeByName(nodes: Node[]): Node[] {
+  return [...nodes]
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    })
+    .map((n) => (n.type === "folder" ? { ...n, children: sortTreeByName(n.children) } : n));
+}
+
 /** `true` se `id` é o próprio nó ou um descendente (para impedir mover pasta para dentro de si). */
 export function isInSubtree(node: Node, id: string): boolean {
   if (node.id === id) return true;
