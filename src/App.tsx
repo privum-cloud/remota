@@ -4,6 +4,7 @@ import { useSessions } from "./state/useSessions";
 import { useUpdate } from "./lib/useUpdate";
 import { VaultUnlock } from "./components/VaultUnlock";
 import { PasswordPrompt } from "./components/PasswordPrompt";
+import { SetPasswordPrompt } from "./components/SetPasswordPrompt";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { ConnectionTree } from "./components/ConnectionTree";
 import { ConnectionEditor } from "./components/ConnectionEditor";
@@ -32,6 +33,8 @@ export default function App() {
   // password, or null if cancelled. The value is handed straight to the session, never stored.
   const [pwPrompt, setPwPrompt] = useState<{ name: string; resolve: (pw: string | null) => void } | null>(null);
   const promptPassword = (name: string) => new Promise<string | null>((resolve) => setPwPrompt({ name, resolve }));
+  const [setPwModal, setSetPwModal] = useState<{ title: string; resolve: (pw: string | null) => void } | null>(null);
+  const promptNewPassword = (title: string) => new Promise<string | null>((resolve) => setSetPwModal({ title, resolve }));
 
   // Built once and rendered in every branch below — including the locked screen. Whoever has not
   // opened Remota in a month is exactly the person who has not heard about the release that fixed
@@ -157,16 +160,46 @@ export default function App() {
     }
   }
 
-  async function importRemotaJson() {
-    const path = await open({ multiple: false, filters: [{ name: "JSON Remota", extensions: ["json"] }] });
+  async function exportConnectionsEncrypted() {
+    const path = await save({
+      defaultPath: "remota-connections.dat",
+      filters: [{ name: "Remota encrypted", extensions: ["dat"] }],
+    });
     if (typeof path !== "string") return;
+    const pw = await promptNewPassword("Set a password for this export");
+    if (pw === null) return; // cancelled → nothing is written
     try {
-      const r = await vaultApi.importRemotaJson(path);
-      await v.refresh();
+      const r = await vaultApi.exportConnectionsEncrypted(path, pw);
       setNotice(r.message);
     } catch (e) {
-      setNotice("Import failed: " + String(e));
+      setNotice("Export failed: " + String(e));
     }
+  }
+
+  async function importRemotaJson() {
+    const path = await open({ multiple: false, filters: [{ name: "Remota", extensions: ["dat", "json"] }] });
+    if (typeof path !== "string") return;
+    const name = path.split(/[/\\]/).pop() ?? "export";
+    const attempt = async (pw?: string): Promise<void> => {
+      try {
+        const r = await vaultApi.importRemotaJson(path, pw);
+        await v.refresh();
+        setNotice(r.message);
+      } catch (e) {
+        const err = String(e);
+        if (err.includes("NeedsPassword")) {
+          const typed = await promptPassword(name);
+          if (typed === null) return; // cancelled → no import
+          return attempt(typed);
+        }
+        if (err.includes("Crypto")) {
+          setNotice("Could not decrypt — wrong password or the file is corrupt.");
+          return;
+        }
+        setNotice("Import failed: " + err);
+      }
+    };
+    await attempt();
   }
 
   async function deleteNode(id: string) {
@@ -199,8 +232,9 @@ export default function App() {
         { label: "New folder", onClick: newFolder },
         "sep",
         { label: "Import from mRemoteNG (confCons.xml)…", onClick: importMremoteng },
-        { label: "Import connections (Remota JSON)…", onClick: importRemotaJson },
-        { label: "Export connections (JSON)…", onClick: exportConnections },
+        { label: "Import connections (Remota)…", onClick: importRemotaJson },
+        { label: "Export connections (encrypted)…", onClick: exportConnectionsEncrypted },
+        { label: "Export connections (unencrypted backup)…", onClick: exportConnections },
         "sep",
         { label: "Lock vault", onClick: lock },
       ],
@@ -304,6 +338,14 @@ export default function App() {
           name={pwPrompt.name}
           onSubmit={(pw) => { pwPrompt.resolve(pw); setPwPrompt(null); }}
           onCancel={() => { pwPrompt.resolve(null); setPwPrompt(null); }}
+        />
+      )}
+
+      {setPwModal && (
+        <SetPasswordPrompt
+          title={setPwModal.title}
+          onSubmit={(pw) => { setPwModal.resolve(pw); setSetPwModal(null); }}
+          onCancel={() => { setPwModal.resolve(null); setSetPwModal(null); }}
         />
       )}
 
