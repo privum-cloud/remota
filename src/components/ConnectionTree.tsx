@@ -1,6 +1,7 @@
 import { type CSSProperties, type MouseEvent, useState } from "react";
 import type { Connection, Credentials, Document, Node } from "../lib/vaultApi";
 import { ContextMenu, type CtxItem } from "./ContextMenu";
+import { sortTreeByName } from "../lib/tree";
 import { colors } from "./styles";
 
 /** Todos os ids de pasta na árvore (para expand/collapse all). */
@@ -58,6 +59,9 @@ type Props = {
 export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onOpenNew, onDelete, onNewConnection, onNewFolder, onMove }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; items: CtxItem[] } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [sortByName, setSortByName] = useState<boolean>(() => {
+    try { return localStorage.getItem("remota.sortByName") === "1"; } catch { return false; }
+  });
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
@@ -86,6 +90,14 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onOpenNew, o
   const collapseAll = () => setCollapsed(new Set(allFolderIds(doc.nodes)));
   const expandAll = () => setCollapsed(new Set());
   const hasFolders = doc.nodes.some((n) => n.type === "folder");
+  const toggleSort = () =>
+    setSortByName((v) => {
+      const next = !v;
+      try { localStorage.setItem("remota.sortByName", next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+  // View-only: never mutates the stored order. Turning the sort off restores the manual tree.
+  const view = sortByName ? sortTreeByName(doc.nodes) : doc.nodes;
 
   function itemsFor(node: Node | null): CtxItem[] {
     if (!node) {
@@ -125,16 +137,28 @@ export function ConnectionTree({ doc, selectedId, onSelect, onOpen, onOpenNew, o
       onDrop={(e) => { e.preventDefault(); dnd.onDrop(null); }}
       style={{ padding: 6, minHeight: "100%", outline: dropTarget === "root" ? `2px dashed ${colors.accent}` : "none", outlineOffset: -2 }}
     >
-      {hasFolders && (
+      {doc.nodes.length > 0 && (
         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", padding: "0 2px 6px" }}>
-          <button type="button" style={miniBtn} onClick={expandAll} title="Expand all folders">Expand all</button>
-          <button type="button" style={miniBtn} onClick={collapseAll} title="Collapse all folders">Collapse all</button>
+          <button
+            type="button"
+            style={{ ...miniBtn, ...(sortByName ? { color: colors.accent, borderColor: colors.accent } : {}) }}
+            onClick={toggleSort}
+            title={sortByName ? "Sorted by name — click for manual order" : "Sort connections by name"}
+          >
+            Sort A–Z
+          </button>
+          {hasFolders && (
+            <>
+              <button type="button" style={miniBtn} onClick={expandAll} title="Expand all folders">Expand all</button>
+              <button type="button" style={miniBtn} onClick={collapseAll} title="Collapse all folders">Collapse all</button>
+            </>
+          )}
         </div>
       )}
       {doc.nodes.length === 0 ? (
         <div style={{ padding: 12, color: colors.dim, fontSize: 13 }}>Empty — right-click here to create.</div>
       ) : (
-        doc.nodes.map((n) => (
+        view.map((n) => (
           <TreeNode
             key={n.id}
             node={n}
