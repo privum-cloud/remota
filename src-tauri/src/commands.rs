@@ -8,7 +8,9 @@ use crate::gateway::{SessionKind, SessionRegistry, SessionSpec};
 use crate::model::{Document, Gateway, Node, Relay};
 use crate::settings::Settings;
 use crate::update::{delivery, Delivery, RELEASES_URL};
-use crate::vault::{load_document, save_document, KdfParams, VaultError, VaultManager};
+use crate::vault::{
+    is_encrypted, load_document, open_document, save_document, KdfParams, VaultError, VaultManager,
+};
 
 pub struct AppState {
     pub registry: Arc<SessionRegistry>,
@@ -176,11 +178,30 @@ pub fn export_connections_encrypted(
     })
 }
 
-/// Reimporta um JSON exportado pelo Remota (merge na raiz).
+/// Decodifica um export do Remota — ficheiro encriptado (formato do cofre, precisa de
+/// `password`) OU JSON em claro. O byte de versão (não a extensão) decide qual: um export
+/// encriptado começa com `0x01`, o JSON em claro com `{`.
+fn decode_remota_import(bytes: &[u8], password: Option<&str>) -> Result<Document, VaultError> {
+    if is_encrypted(bytes) {
+        let pw = password.ok_or(VaultError::NeedsPassword)?;
+        let plain = open_document(bytes, pw)?;
+        serde_json::from_slice(&plain).map_err(|_| VaultError::BadFormat)
+    } else {
+        serde_json::from_slice(bytes).map_err(|_| VaultError::BadFormat)
+    }
+}
+
+/// Reimporta um export do Remota (merge na raiz). Auto-deteta encriptado vs JSON em claro;
+/// `password` só é usada quando o ficheiro está encriptado (`None` → erro `NeedsPassword`,
+/// que o frontend apanha para pedir a senha).
 #[tauri::command]
-pub fn import_remota_json(state: State<AppState>, path: String) -> Result<ImportReport, VaultError> {
+pub fn import_remota_json(
+    state: State<AppState>,
+    path: String,
+    password: Option<String>,
+) -> Result<ImportReport, VaultError> {
     let bytes = std::fs::read(&path).map_err(|e| VaultError::Io(e.to_string()))?;
-    let doc: Document = serde_json::from_slice(&bytes).map_err(|_| VaultError::BadFormat)?;
+    let doc = decode_remota_import(&bytes, password.as_deref())?;
     let connections = state.vault.import(doc.nodes)?;
     Ok(ImportReport {
         connections,
@@ -355,5 +376,66 @@ mod tests {
             "a corrupt ciphertext must fail to decrypt"
         );
         std::fs::remove_file(&path).ok();
+    }
+
+    fn sealed_bytes(name: &str, doc: &Document, pw: &str) -> Vec<u8> {
+        let path = tmp_export(name);
+        save_document(&path, pw, KdfParams::default(), &serde_json::to_vec(doc).unwrap()).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+        bytes
+    }
+
+    #[test]
+    fn decode_plaintext_json_returns_doc() {
+        let doc = decode_remota_import(b"{\"nodes\":[],\"trash\":[]}", None).unwrap();
+        assert!(doc.nodes.is_empty());
+    }
+
+    #[test]
+    fn decode_plaintext_ignores_password() {
+        let doc = decode_remota_import(b"{\"nodes\":[],\"trash\":[]}", Some("anything")).unwrap();
+        assert!(doc.nodes.is_empty());
+    }
+
+    #[test]
+    fn decode_encrypted_with_password_returns_doc() {
+        let original = doc_with_password("pw-secret");
+        let bytes = sealed_bytes("decode-ok", &original, "P");
+        let got = decode_remota_import(&bytes, Some("P")).unwrap();
+        assert_eq!(
+            serde_json::to_vec(&got).unwrap(),
+            serde_json::to_vec(&original).unwrap(),
+            "decrypts to the same tree"
+        );
+    }
+
+    #[test]
+    fn decode_encrypted_without_password_needs_password() {
+        let bytes = sealed_bytes("decode-needspw", &doc_with_password("x"), "P");
+        assert!(matches!(
+            decode_remota_import(&bytes, None),
+            Err(VaultError::NeedsPassword)
+        ));
+    }
+
+    #[test]
+    fn decode_encrypted_wrong_password_errs() {
+        let bytes = sealed_bytes("decode-wrongpw", &doc_with_password("x"), "P");
+        assert!(matches!(
+            decode_remota_import(&bytes, Some("nope")),
+            Err(VaultError::Crypto)
+        ));
+    }
+
+    #[test]
+    fn decode_corrupt_ciphertext_errs() {
+        let mut bytes = sealed_bytes("decode-corrupt", &doc_with_password("x"), "P");
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xFF;
+        assert!(matches!(
+            decode_remota_import(&bytes, Some("P")),
+            Err(VaultError::Crypto)
+        ));
     }
 }
