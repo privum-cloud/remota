@@ -86,8 +86,10 @@ export const vaultApi = {
     invoke<{ connections: number; message: string }>("import_mremoteng", { path }),
   exportConnections: (path: string) =>
     invoke<{ connections: number; message: string }>("export_connections", { path }),
-  importRemotaJson: (path: string) =>
-    invoke<{ connections: number; message: string }>("import_remota_json", { path }),
+  exportConnectionsEncrypted: (path: string, password: string) =>
+    invoke<{ connections: number; message: string }>("export_connections_encrypted", { path, password }),
+  importRemotaJson: (path: string, password?: string) =>
+    invoke<{ connections: number; message: string }>("import_remota_json", { path, password }),
   updatePolicy: () => invoke<UpdatePolicy>("update_policy"),
   setUpdateCheck: (enabled: boolean) => invoke<boolean>("set_update_check", { enabled }),
 };
