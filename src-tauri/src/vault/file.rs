@@ -61,6 +61,14 @@ pub fn open_document(bytes: &[u8], password: &str) -> Result<Vec<u8>, VaultError
     let ciphertext = &bytes[41..];
 
     let params = KdfParams { m_cost, t_cost, p_cost };
+    // Reject any header whose KDF params aren't the ones we write. Every file this app
+    // produces (the vault and exports) seals with `KdfParams::default()`; refusing anything
+    // else keeps an untrusted or corrupt import header from driving Argon2 to panic
+    // (m_cost < MIN_M_COST) or to a pathological allocation (m_cost near u32::MAX), before any
+    // key is derived. If the default is ever changed, bump VERSION and migrate here.
+    if params != KdfParams::default() {
+        return Err(VaultError::BadFormat);
+    }
     let key = derive_key(password, &salt, params);
     open(&key, &nonce, ciphertext)
 }
@@ -152,5 +160,38 @@ mod tests {
             Err(crate::vault::VaultError::Crypto)
         ));
         std::fs::remove_file(&path).ok();
+    }
+
+    fn header_with_mcost(m_cost: u32) -> Vec<u8> {
+        let mut buf = vec![VERSION];
+        buf.extend_from_slice(&m_cost.to_le_bytes());
+        buf.extend_from_slice(&2u32.to_le_bytes()); // t_cost (default)
+        buf.extend_from_slice(&1u32.to_le_bytes()); // p_cost (default)
+        buf.extend_from_slice(&[0u8; 16]); // salt
+        buf.extend_from_slice(&[0u8; 12]); // nonce
+        buf.extend_from_slice(&[0u8; 48]); // arbitrary "ciphertext" bytes
+        buf
+    }
+
+    #[test]
+    fn open_document_rejects_nondefault_params() {
+        // A header whose KDF params aren't the ones we write must be rejected as BadFormat
+        // BEFORE any key derivation — otherwise a hostile import file could drive Argon2 to
+        // panic (m_cost < MIN_M_COST) or attempt a multi-TiB allocation (m_cost = u32::MAX).
+        let nondefault = header_with_mcost(19457); // default m_cost is 19456
+        assert!(matches!(
+            open_document(&nondefault, "pw"),
+            Err(crate::vault::VaultError::BadFormat)
+        ));
+        // Regression guards for the dangerous inputs: these must NOT panic or allocate — the
+        // param check rejects them before Argon2 runs. (Only safe to call once the guard exists.)
+        assert!(matches!(
+            open_document(&header_with_mcost(0), "pw"), // would panic in Params::new (m_cost < MIN)
+            Err(crate::vault::VaultError::BadFormat)
+        ));
+        assert!(matches!(
+            open_document(&header_with_mcost(u32::MAX), "pw"), // would attempt a ~4 TiB allocation
+            Err(crate::vault::VaultError::BadFormat)
+        ));
     }
 }
