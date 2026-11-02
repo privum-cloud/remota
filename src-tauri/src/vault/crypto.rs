@@ -26,6 +26,9 @@ pub enum VaultError {
     Crypto,
     BadFormat,
     Locked,
+    /// The file is encrypted but no password was supplied. The frontend uses this
+    /// (serialized as the bare string `"NeedsPassword"`) to decide to prompt.
+    NeedsPassword,
     Io(String),
 }
 
@@ -38,6 +41,7 @@ impl std::fmt::Display for VaultError {
             ),
             VaultError::BadFormat => write!(f, "invalid vault file format"),
             VaultError::Locked => write!(f, "vault is locked (unlock first)"),
+            VaultError::NeedsPassword => write!(f, "file is encrypted; a password is required"),
             VaultError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }

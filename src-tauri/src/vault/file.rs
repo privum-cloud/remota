@@ -36,15 +36,29 @@ pub fn save_document(
 
 pub fn load_document(path: &Path, password: &str) -> Result<Vec<u8>, VaultError> {
     let buf = std::fs::read(path).map_err(|e| VaultError::Io(e.to_string()))?;
-    if buf.len() < HEADER_LEN || buf[0] != VERSION {
+    open_document(&buf, password)
+}
+
+/// `true` if `bytes` look like a sealed document (the VERSION byte plus at least a full
+/// header), as opposed to plaintext JSON (which begins with `{`). The discriminator is the
+/// header, not the file extension, because exported files get renamed. Used to auto-detect
+/// encrypted vs plaintext on import.
+pub fn is_encrypted(bytes: &[u8]) -> bool {
+    bytes.first() == Some(&VERSION) && bytes.len() >= HEADER_LEN
+}
+
+/// Decrypt an already-read sealed document — the same format `save_document` writes. Split
+/// out of `load_document` so the import path can sniff and decrypt from bytes it already has.
+pub fn open_document(bytes: &[u8], password: &str) -> Result<Vec<u8>, VaultError> {
+    if bytes.len() < HEADER_LEN || bytes[0] != VERSION {
         return Err(VaultError::BadFormat);
     }
-    let m_cost = u32::from_le_bytes(buf[1..5].try_into().unwrap());
-    let t_cost = u32::from_le_bytes(buf[5..9].try_into().unwrap());
-    let p_cost = u32::from_le_bytes(buf[9..13].try_into().unwrap());
-    let salt: [u8; 16] = buf[13..29].try_into().unwrap();
-    let nonce: [u8; 12] = buf[29..41].try_into().unwrap();
-    let ciphertext = &buf[41..];
+    let m_cost = u32::from_le_bytes(bytes[1..5].try_into().unwrap());
+    let t_cost = u32::from_le_bytes(bytes[5..9].try_into().unwrap());
+    let p_cost = u32::from_le_bytes(bytes[9..13].try_into().unwrap());
+    let salt: [u8; 16] = bytes[13..29].try_into().unwrap();
+    let nonce: [u8; 12] = bytes[29..41].try_into().unwrap();
+    let ciphertext = &bytes[41..];
 
     let params = KdfParams { m_cost, t_cost, p_cost };
     let key = derive_key(password, &salt, params);
@@ -96,5 +110,47 @@ mod tests {
         assert_ne!(a[13..41], b[13..41]);
         std::fs::remove_file(&p1).ok();
         std::fs::remove_file(&p2).ok();
+    }
+
+    #[test]
+    fn is_encrypted_true_for_sealed_bytes() {
+        let path = tmp_path("sniff-sealed");
+        save_document(&path, "pw", KdfParams::default(), b"{\"nodes\":[]}").unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(is_encrypted(&bytes), "a sealed vault file must sniff as encrypted");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn is_encrypted_false_for_plaintext_json() {
+        assert!(!is_encrypted(b"{\"nodes\":[]}"));
+    }
+
+    #[test]
+    fn is_encrypted_false_for_short_bytes() {
+        // Starts with the VERSION byte but is shorter than a full header.
+        assert!(!is_encrypted(&[1u8, 2, 3]));
+    }
+
+    #[test]
+    fn open_document_roundtrips() {
+        let path = tmp_path("open-roundtrip");
+        save_document(&path, "pw", KdfParams::default(), b"secret payload").unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let got = open_document(&bytes, "pw").unwrap();
+        assert_eq!(got, b"secret payload");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn open_document_wrong_password_errs() {
+        let path = tmp_path("open-wrongpw");
+        save_document(&path, "pw", KdfParams::default(), b"secret payload").unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(matches!(
+            open_document(&bytes, "nope"),
+            Err(crate::vault::VaultError::Crypto)
+        ));
+        std::fs::remove_file(&path).ok();
     }
 }
