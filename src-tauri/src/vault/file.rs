@@ -174,6 +174,22 @@ mod tests {
     }
 
     #[test]
+    fn kdf_defaults_and_version_are_pinned() {
+        // `open_document` rejects any header whose KDF params != `KdfParams::default()`, and it is
+        // shared by the live-vault load path. So changing these defaults would make EVERY existing
+        // vault and export stop opening. If you change them you MUST bump VERSION and add a
+        // migration branch in `open_document`. This test pins the coupling so it can't drift
+        // silently.
+        let d = KdfParams::default();
+        assert_eq!(
+            (d.m_cost, d.t_cost, d.p_cost),
+            (19456, 2, 1),
+            "KDF defaults changed — bump VERSION and migrate in open_document"
+        );
+        assert_eq!(VERSION, 1, "on-disk VERSION changed — add a migration path");
+    }
+
+    #[test]
     fn open_document_rejects_nondefault_params() {
         // A header whose KDF params aren't the ones we write must be rejected as BadFormat
         // BEFORE any key derivation — otherwise a hostile import file could drive Argon2 to

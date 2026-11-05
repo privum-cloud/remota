@@ -16,7 +16,7 @@ import { MenuBar, type Menu } from "./components/MenuBar";
 import { findConnWithChain, findNode, findParentId, isInSubtree, nodeExists } from "./lib/tree";
 import { resolveCreds, resolveGateway } from "./lib/inherit";
 import type { Node } from "./lib/vaultApi";
-import { vaultApi } from "./lib/vaultApi";
+import { vaultApi, vaultErrorText } from "./lib/vaultApi";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { colors } from "./components/styles";
 
@@ -156,7 +156,12 @@ export default function App() {
       const r = await vaultApi.exportConnections(path);
       setNotice(r.message);
     } catch (e) {
-      setNotice("Export failed: " + String(e));
+      const err = vaultErrorText(e);
+      if (err.includes("WouldOverwriteVault")) {
+        setNotice("That's your live vault file — pick a different file for the export.");
+        return;
+      }
+      setNotice("Export failed: " + err);
     }
   }
 
@@ -172,7 +177,12 @@ export default function App() {
       const r = await vaultApi.exportConnectionsEncrypted(path, pw);
       setNotice(r.message);
     } catch (e) {
-      setNotice("Export failed: " + String(e));
+      const err = vaultErrorText(e);
+      if (err.includes("WouldOverwriteVault")) {
+        setNotice("That's your live vault file — pick a different file for the export.");
+        return;
+      }
+      setNotice("Export failed: " + err);
     }
   }
 
@@ -186,7 +196,7 @@ export default function App() {
         await v.refresh();
         setNotice(r.message);
       } catch (e) {
-        const err = String(e);
+        const err = vaultErrorText(e);
         if (err.includes("NeedsPassword")) {
           const typed = await promptPassword(name);
           if (typed === null) return; // cancelled → no import

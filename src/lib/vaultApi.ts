@@ -70,6 +70,23 @@ export interface UpdatePolicy {
   currentVersion: string;
 }
 
+/** A readable string for a rejected vault command. `VaultError`'s unit variants arrive as a
+ *  bare string (e.g. "Crypto", "NeedsPassword", "WouldOverwriteVault"); the one payload variant
+ *  arrives as `{ Io: "..." }`, which `String(e)` would render as "[object Object]". */
+export function vaultErrorText(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const io = (e as { Io?: unknown }).Io;
+    if (typeof io === "string") return io;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      /* fall through */
+    }
+  }
+  return String(e);
+}
+
 // Wrappers tipados dos comandos Tauri (Tauri v2 converte snake_case→camelCase nos args).
 export const vaultApi = {
   exists: () => invoke<boolean>("vault_exists"),

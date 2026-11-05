@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -132,10 +132,35 @@ pub fn import_mremoteng(state: State<AppState>, path: String) -> Result<ImportRe
     })
 }
 
+/// Resolve `p` for a same-file comparison. If it exists, canonicalize it whole; otherwise
+/// (an export target need not exist yet) canonicalize its parent dir — which must exist to
+/// write into — and re-attach the file name. `None` when neither resolves.
+fn resolve_for_compare(p: &Path) -> Option<PathBuf> {
+    if let Ok(c) = std::fs::canonicalize(p) {
+        return Some(c);
+    }
+    let parent = p.parent().filter(|pp| !pp.as_os_str().is_empty())?;
+    let file = p.file_name()?;
+    Some(std::fs::canonicalize(parent).ok()?.join(file))
+}
+
+/// Refuse to write an export over the live vault file. The OS save dialog lets the user aim
+/// anywhere, including `~/.config/remota/connections.dat`; overwriting it with an export sealed
+/// under a different password would lock them out of their vault on the next unlock. Compares
+/// resolved paths (handling targets that don't exist yet) and refuses on a match before any byte
+/// is written.
+fn guard_not_vault_path(vault_path: &Path, target: &Path) -> Result<(), VaultError> {
+    match (resolve_for_compare(vault_path), resolve_for_compare(target)) {
+        (Some(v), Some(t)) if v == t => Err(VaultError::WouldOverwriteVault),
+        _ => Ok(()),
+    }
+}
+
 /// Exporta a árvore de conexões para um JSON em claro (backup/portabilidade).
 /// AVISO: contém as passwords em claro — é uma exportação explícita.
 #[tauri::command]
 pub fn export_connections(state: State<AppState>, path: String) -> Result<ImportReport, VaultError> {
+    guard_not_vault_path(state.vault.path(), Path::new(&path))?;
     let doc = state.vault.tree()?;
     let json = serde_json::to_vec_pretty(&doc).map_err(|e| VaultError::Io(e.to_string()))?;
     std::fs::write(&path, &json).map_err(|e| VaultError::Io(e.to_string()))?;
@@ -189,6 +214,7 @@ pub fn export_connections_encrypted(
     path: String,
     password: String,
 ) -> Result<ImportReport, VaultError> {
+    guard_not_vault_path(state.vault.path(), Path::new(&path))?;
     let doc = state.vault.tree()?;
     write_encrypted_export(Path::new(&path), &password, &doc)?;
     let connections = crate::importer::count_connections(&doc.nodes);
@@ -201,13 +227,17 @@ pub fn export_connections_encrypted(
 /// Decodifica um export do Remota — ficheiro encriptado (formato do cofre, precisa de
 /// `password`) OU JSON em claro. O byte de versão (não a extensão) decide qual: um export
 /// encriptado começa com `0x01`, o JSON em claro com `{`.
-fn decode_remota_import(bytes: &[u8], password: Option<&str>) -> Result<Document, VaultError> {
+/// Returns the decoded document and whether the source was encrypted (so the caller can report
+/// the right provenance).
+fn decode_remota_import(bytes: &[u8], password: Option<&str>) -> Result<(Document, bool), VaultError> {
     if is_encrypted(bytes) {
         let pw = password.ok_or(VaultError::NeedsPassword)?;
         let plain = open_document(bytes, pw)?;
-        serde_json::from_slice(&plain).map_err(|_| VaultError::BadFormat)
+        let doc = serde_json::from_slice(&plain).map_err(|_| VaultError::BadFormat)?;
+        Ok((doc, true))
     } else {
-        serde_json::from_slice(bytes).map_err(|_| VaultError::BadFormat)
+        let doc = serde_json::from_slice(bytes).map_err(|_| VaultError::BadFormat)?;
+        Ok((doc, false))
     }
 }
 
@@ -221,11 +251,16 @@ pub fn import_remota_json(
     password: Option<String>,
 ) -> Result<ImportReport, VaultError> {
     let bytes = std::fs::read(&path).map_err(|e| VaultError::Io(e.to_string()))?;
-    let doc = decode_remota_import(&bytes, password.as_deref())?;
+    let (doc, encrypted) = decode_remota_import(&bytes, password.as_deref())?;
     let connections = state.vault.import(doc.nodes)?;
+    let source = if encrypted {
+        "an encrypted Remota export"
+    } else {
+        "a Remota JSON export"
+    };
     Ok(ImportReport {
         connections,
-        message: format!("{connections} connections imported from Remota JSON."),
+        message: format!("{connections} connections imported from {source}."),
     })
 }
 
@@ -408,26 +443,30 @@ mod tests {
 
     #[test]
     fn decode_plaintext_json_returns_doc() {
-        let doc = decode_remota_import(b"{\"nodes\":[],\"trash\":[]}", None).unwrap();
+        let (doc, encrypted) = decode_remota_import(b"{\"nodes\":[],\"trash\":[]}", None).unwrap();
         assert!(doc.nodes.is_empty());
+        assert!(!encrypted, "plaintext JSON must report as not encrypted");
     }
 
     #[test]
     fn decode_plaintext_ignores_password() {
-        let doc = decode_remota_import(b"{\"nodes\":[],\"trash\":[]}", Some("anything")).unwrap();
+        let (doc, encrypted) =
+            decode_remota_import(b"{\"nodes\":[],\"trash\":[]}", Some("anything")).unwrap();
         assert!(doc.nodes.is_empty());
+        assert!(!encrypted);
     }
 
     #[test]
     fn decode_encrypted_with_password_returns_doc() {
         let original = doc_with_password("pw-secret");
         let bytes = sealed_bytes("decode-ok", &original, "P");
-        let got = decode_remota_import(&bytes, Some("P")).unwrap();
+        let (got, encrypted) = decode_remota_import(&bytes, Some("P")).unwrap();
         assert_eq!(
             serde_json::to_vec(&got).unwrap(),
             serde_json::to_vec(&original).unwrap(),
             "decrypts to the same tree"
         );
+        assert!(encrypted, "a sealed file must report as encrypted");
     }
 
     #[test]
@@ -480,5 +519,44 @@ mod tests {
 
         std::fs::remove_dir_all(&tmp).ok();
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn export_guard_refuses_vault_path_and_leaves_it_untouched() {
+        // Aiming an export at the live vault file must be refused BEFORE any write — overwriting
+        // the vault with an export sealed under a different password would lock the user out.
+        let vault = tmp_export("guard-vault");
+        std::fs::write(&vault, b"REAL-VAULT-BYTES").unwrap();
+        assert!(matches!(
+            guard_not_vault_path(&vault, &vault),
+            Err(VaultError::WouldOverwriteVault)
+        ));
+        // The guard performs no write: the vault file is byte-for-byte intact.
+        assert_eq!(std::fs::read(&vault).unwrap(), b"REAL-VAULT-BYTES");
+        std::fs::remove_file(&vault).ok();
+    }
+
+    #[test]
+    fn export_guard_allows_a_different_path() {
+        let vault = tmp_export("guard-vault-ok");
+        std::fs::write(&vault, b"x").unwrap();
+        let other = tmp_export("guard-other");
+        assert!(guard_not_vault_path(&vault, &other).is_ok());
+        std::fs::remove_file(&vault).ok();
+    }
+
+    #[test]
+    fn export_guard_matches_noncanonical_spelling() {
+        // Reaching the same file via a "./name" spelling must still be caught.
+        let vault = tmp_export("guard-noncanon");
+        std::fs::write(&vault, b"x").unwrap();
+        let dir = vault.parent().unwrap();
+        let name = vault.file_name().unwrap();
+        let spelled = dir.join(".").join(name);
+        assert!(matches!(
+            guard_not_vault_path(&vault, &spelled),
+            Err(VaultError::WouldOverwriteVault)
+        ));
+        std::fs::remove_file(&vault).ok();
     }
 }
