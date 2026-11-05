@@ -132,24 +132,57 @@ pub fn import_mremoteng(state: State<AppState>, path: String) -> Result<ImportRe
     })
 }
 
-/// Resolve `p` for a same-file comparison. If it exists, canonicalize it whole; otherwise
-/// (an export target need not exist yet) canonicalize its parent dir — which must exist to
-/// write into — and re-attach the file name. `None` when neither resolves.
+/// Resolve `p` to an absolute, symlink- and `..`-free path for a same-file comparison. If `p`
+/// exists it is canonicalized whole; otherwise (an export target need not exist yet) the longest
+/// existing ancestor is canonicalized and the remaining, not-yet-created components are applied
+/// lexically — resolving `.` and `..`. This matters: a target spelled `<dir>/missing/../vault`
+/// has neither `p` nor `p.parent()` existing, so naively it would resolve to nothing and slip
+/// past the guard; yet the export's `create_dir_all` would materialize `missing/` and the rename
+/// would land on `<dir>/vault`. Resolving the tail lexically collapses it back onto the vault.
+/// `None` only when no ancestor resolves. Purely lexical on the non-existent tail is safe — those
+/// components can hold no symlinks — because the existing prefix is already fully canonicalized.
 fn resolve_for_compare(p: &Path) -> Option<PathBuf> {
+    use std::path::Component;
     if let Ok(c) = std::fs::canonicalize(p) {
         return Some(c);
     }
-    let parent = p.parent().filter(|pp| !pp.as_os_str().is_empty())?;
-    let file = p.file_name()?;
-    Some(std::fs::canonicalize(parent).ok()?.join(file))
+    let mut ancestor = p;
+    let mut tail: Vec<Component> = Vec::new();
+    loop {
+        tail.push(ancestor.components().next_back()?);
+        let parent = ancestor.parent().filter(|pp| !pp.as_os_str().is_empty())?;
+        if let Ok(base) = std::fs::canonicalize(parent) {
+            let mut out = base;
+            for comp in tail.iter().rev() {
+                match comp {
+                    Component::Normal(n) => out.push(n),
+                    Component::ParentDir => {
+                        out.pop();
+                    }
+                    Component::CurDir => {}
+                    _ => return None,
+                }
+            }
+            return Some(out);
+        }
+        ancestor = parent;
+    }
 }
 
 /// Refuse to write an export over the live vault file. The OS save dialog lets the user aim
 /// anywhere, including `~/.config/remota/connections.dat`; overwriting it with an export sealed
-/// under a different password would lock them out of their vault on the next unlock. Compares
-/// resolved paths (handling targets that don't exist yet) and refuses on a match before any byte
-/// is written.
+/// under a different password would lock them out of their vault on the next unlock. Refuses,
+/// before any byte is written, on two kinds of match: (1) device+inode identity when the target
+/// already exists — which also catches a hardlink to the vault, invisible to `canonicalize`; and
+/// (2) resolved-path equality for a target that doesn't exist yet, with `.`/`..` normalized so a
+/// spelling through a not-yet-created directory can't slip past.
 fn guard_not_vault_path(vault_path: &Path, target: &Path) -> Result<(), VaultError> {
+    use std::os::unix::fs::MetadataExt;
+    if let (Ok(v), Ok(t)) = (std::fs::metadata(vault_path), std::fs::metadata(target)) {
+        if v.dev() == t.dev() && v.ino() == t.ino() {
+            return Err(VaultError::WouldOverwriteVault);
+        }
+    }
     match (resolve_for_compare(vault_path), resolve_for_compare(target)) {
         (Some(v), Some(t)) if v == t => Err(VaultError::WouldOverwriteVault),
         _ => Ok(()),
@@ -557,6 +590,44 @@ mod tests {
             guard_not_vault_path(&vault, &spelled),
             Err(VaultError::WouldOverwriteVault)
         ));
+        std::fs::remove_file(&vault).ok();
+    }
+
+    #[test]
+    fn export_guard_refuses_dotdot_through_missing_dir() {
+        // Regression: a target spelled through a NON-existent intermediate dir
+        // (`<dir>/nope/../vault`) must be refused. Otherwise the guard misses it, and the
+        // encrypted export's create_dir_all materializes `nope/` and the rename resolves
+        // `nope/..` back onto the vault — overwriting it under a different password (lockout).
+        let vault = tmp_export("guard-dotdot");
+        std::fs::write(&vault, b"REAL-VAULT").unwrap();
+        let dir = vault.parent().unwrap();
+        let name = vault.file_name().unwrap();
+        let sneaky = dir.join("nope-does-not-exist").join("..").join(name);
+        assert!(matches!(
+            guard_not_vault_path(&vault, &sneaky),
+            Err(VaultError::WouldOverwriteVault)
+        ));
+        // The guard must not have created the decoy dir as a side effect.
+        assert!(!dir.join("nope-does-not-exist").exists());
+        std::fs::remove_file(&vault).ok();
+    }
+
+    #[test]
+    fn export_guard_refuses_hardlink_to_vault() {
+        // A hardlink to the vault is a different name for the same inode; canonicalize can't
+        // see it, so device+inode identity must catch it — otherwise a plaintext export would
+        // truncate the shared inode and brick the vault.
+        let vault = tmp_export("guard-hardlink-vault");
+        std::fs::write(&vault, b"REAL-VAULT").unwrap();
+        let link = tmp_export("guard-hardlink-alias");
+        std::fs::remove_file(&link).ok();
+        std::fs::hard_link(&vault, &link).unwrap();
+        assert!(matches!(
+            guard_not_vault_path(&vault, &link),
+            Err(VaultError::WouldOverwriteVault)
+        ));
+        std::fs::remove_file(&link).ok();
         std::fs::remove_file(&vault).ok();
     }
 }
