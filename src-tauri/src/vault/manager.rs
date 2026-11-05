@@ -28,6 +28,11 @@ impl VaultManager {
         self.inner.lock().unwrap().is_some()
     }
 
+    /// Path of the vault file on disk. Used to refuse exports that would overwrite it.
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
     /// `true` se já existe um cofre em disco. Permite ao UI distinguir
     /// "definir senha mestra" (primeiro uso) de "destravar" (cofre existente).
     pub fn vault_exists(&self) -> bool {

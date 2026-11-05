@@ -29,6 +29,9 @@ pub enum VaultError {
     /// The file is encrypted but no password was supplied. The frontend uses this
     /// (serialized as the bare string `"NeedsPassword"`) to decide to prompt.
     NeedsPassword,
+    /// An export was aimed at the live vault file; refused before writing so it can't
+    /// overwrite the vault and lock the user out. Serialized as `"WouldOverwriteVault"`.
+    WouldOverwriteVault,
     Io(String),
 }
 
@@ -42,6 +45,9 @@ impl std::fmt::Display for VaultError {
             VaultError::BadFormat => write!(f, "invalid vault file format"),
             VaultError::Locked => write!(f, "vault is locked (unlock first)"),
             VaultError::NeedsPassword => write!(f, "file is encrypted; a password is required"),
+            VaultError::WouldOverwriteVault => {
+                write!(f, "refusing to export over the live vault file")
+            }
             VaultError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
@@ -97,6 +103,31 @@ mod tests {
         let bad = derive_key("senha-errada", &salt, params);
         let ct = seal(&good, &nonce, b"documento secreto");
         assert!(matches!(open(&bad, &nonce, &ct), Err(VaultError::Crypto)));
+    }
+
+    #[test]
+    fn vault_error_unit_variants_serialize_to_bare_strings() {
+        // The frontend (App.tsx) classifies errors by matching the serialized VaultError against
+        // bare strings like "NeedsPassword" / "Crypto". serde serializes a fieldless enum variant
+        // as its bare name; pin that here so a future rename breaks THIS build instead of silently
+        // breaking the import/export UX.
+        assert_eq!(serde_json::to_string(&VaultError::Crypto).unwrap(), "\"Crypto\"");
+        assert_eq!(serde_json::to_string(&VaultError::BadFormat).unwrap(), "\"BadFormat\"");
+        assert_eq!(serde_json::to_string(&VaultError::Locked).unwrap(), "\"Locked\"");
+        assert_eq!(
+            serde_json::to_string(&VaultError::NeedsPassword).unwrap(),
+            "\"NeedsPassword\""
+        );
+        assert_eq!(
+            serde_json::to_string(&VaultError::WouldOverwriteVault).unwrap(),
+            "\"WouldOverwriteVault\""
+        );
+        // The one payload-carrying variant stays an object: {"Io":"..."} — the frontend's error
+        // formatter special-cases this shape.
+        assert_eq!(
+            serde_json::to_string(&VaultError::Io("boom".into())).unwrap(),
+            "{\"Io\":\"boom\"}"
+        );
     }
 
     #[test]
