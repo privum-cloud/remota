@@ -9,16 +9,14 @@
 //! connection request; we reply with an RDCleanPath *response* (DER) carrying the X.224 confirm,
 //! the server cert chain and the resolved address; after that it's a raw byte relay.
 
-use std::sync::Arc;
-
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitStream;
 use futures_util::{SinkExt, StreamExt};
 use ironrdp_rdcleanpath::{DetectionResult, RDCleanPath, RDCleanPathPdu};
+use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio_rustls::client::TlsStream;
-use tokio_rustls::TlsConnector;
+use tokio_openssl::SslStream;
 
 use crate::gateway::SessionSpec;
 
@@ -73,33 +71,49 @@ async fn negotiate_and_tls(
     x224_req: &[u8],
     host: &str,
     port: u16,
-) -> Result<(TlsStream<TcpStream>, Vec<u8>, Vec<Vec<u8>>), BoxErr> {
+) -> Result<(SslStream<TcpStream>, Vec<u8>, Vec<Vec<u8>>), BoxErr> {
     let mut tcp = TcpStream::connect((host, port)).await?;
     tcp.write_all(x224_req).await?;
     let x224_resp = read_tpkt(&mut tcp).await?;
 
-    // rustls 0.23 needs the process-default provider (ring) — shared with the relay client.
-    crate::gateway::relay::ensure_crypto_provider();
-    let config = rustls::ClientConfig::builder()
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(AcceptAllServerCert))
-        .with_no_client_auth();
-    let connector = TlsConnector::from(Arc::new(config));
-    let tls = connector.connect(server_name_for(host)?, tcp).await?;
+    let mut builder = SslConnector::builder(SslMethod::tls())?;
+    builder.set_verify(SslVerifyMode::NONE);
+    // Support modern AND legacy ciphers (SECLEVEL=0) so Windows Server (2008/2012/2016+) all work.
+    let _ = builder.set_cipher_list("ALL:@SECLEVEL=0");
 
-    let certs = tls
-        .get_ref()
-        .1
-        .peer_certificates()
-        .map(|cs| cs.iter().map(|c| c.as_ref().to_vec()).collect())
-        .unwrap_or_default();
+    let connector = builder.build();
+    let mut config = connector.configure()?;
+    if host.parse::<std::net::IpAddr>().is_err() {
+        config.set_use_server_name_indication(true);
+    } else {
+        config.set_use_server_name_indication(false);
+    }
+    let ssl = config.into_ssl(host)?;
+    let mut tls = SslStream::new(ssl, tcp)?;
+    std::pin::Pin::new(&mut tls).connect().await?;
+
+    let mut certs = Vec::new();
+    if let Some(leaf) = tls.ssl().peer_certificate() {
+        if let Ok(der) = leaf.to_der() {
+            certs.push(der);
+        }
+    }
+    if let Some(chain) = tls.ssl().peer_cert_chain() {
+        for cert in chain {
+            if let Ok(der) = cert.to_der() {
+                if !certs.contains(&der) {
+                    certs.push(der);
+                }
+            }
+        }
+    }
     Ok((tls, x224_resp, certs))
 }
 
 async fn relay(
     mut ws_tx: futures_util::stream::SplitSink<WebSocket, Message>,
     mut ws_rx: SplitStream<WebSocket>,
-    tls: TlsStream<TcpStream>,
+    tls: SslStream<TcpStream>,
 ) {
     let (mut tls_rd, mut tls_wr) = tokio::io::split(tls);
 
@@ -184,60 +198,6 @@ fn split_host_port(target: &str) -> (String, u16) {
     match target.rsplit_once(':') {
         Some((h, p)) => (h.to_string(), p.parse().unwrap_or(3389)),
         None => (target.to_string(), 3389),
-    }
-}
-
-fn server_name_for(host: &str) -> Result<rustls::pki_types::ServerName<'static>, BoxErr> {
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        Ok(rustls::pki_types::ServerName::IpAddress(ip.into()))
-    } else {
-        Ok(rustls::pki_types::ServerName::try_from(host.to_string())?)
-    }
-}
-
-/// TLS verifier that accepts any server certificate (RDP hosts use self-signed certs; the real
-/// authentication is CredSSP/NLA, done by the client using the cert chain we return).
-#[derive(Debug)]
-struct AcceptAllServerCert;
-
-impl rustls::client::danger::ServerCertVerifier for AcceptAllServerCert {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::pki_types::CertificateDer<'_>,
-        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
-        _server_name: &rustls::pki_types::ServerName<'_>,
-        _ocsp_response: &[u8],
-        _now: rustls::pki_types::UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::danger::ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls::pki_types::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls::pki_types::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        use rustls::SignatureScheme as S;
-        vec![
-            S::RSA_PKCS1_SHA256, S::RSA_PKCS1_SHA384, S::RSA_PKCS1_SHA512,
-            S::ECDSA_NISTP256_SHA256, S::ECDSA_NISTP384_SHA384,
-            S::RSA_PSS_SHA256, S::RSA_PSS_SHA384, S::RSA_PSS_SHA512,
-            S::ED25519,
-        ]
     }
 }
 
