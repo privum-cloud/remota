@@ -56,7 +56,7 @@ export function sortTreeByName(nodes: Node[]): Node[] {
   return [...nodes]
     .sort((a, b) => {
       if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      return a.name.trim().localeCompare(b.name.trim(), undefined, { sensitivity: "base", numeric: true });
     })
     .map((n) => (n.type === "folder" ? { ...n, children: sortTreeByName(n.children) } : n));
 }
