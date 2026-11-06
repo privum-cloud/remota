@@ -6,20 +6,42 @@ const protoColor: Record<string, string> = { ssh: "#7ee787", rdp: "#79c0ff", vnc
 
 type Props = {
   tabs: SessionTab[];
-  activeId: string; // "editor" | id da sessão
+  activeId: string; // "editor" | id da sessão | ""
+  editorExpanded: boolean;
+  onToggleEditor: () => void;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
   onReconnect: (id: string) => void;
   onDuplicate: (id: string) => void;
 };
 
-export function TabBar({ tabs, activeId, onActivate, onClose, onReconnect, onDuplicate }: Props) {
+export function TabBar({ tabs, activeId, editorExpanded, onToggleEditor, onActivate, onClose, onReconnect, onDuplicate }: Props) {
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+
+  const isEditorActive = activeId === "editor" && editorExpanded;
 
   return (
     <div style={barStyle}>
-      <div onClick={() => onActivate("editor")} style={tabStyle(activeId === "editor")}>
-        ✎ Editor
+      <div
+        onClick={onToggleEditor}
+        style={{
+          ...tabStyle(isEditorActive),
+          opacity: editorExpanded ? 1 : 0.75,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+        title={editorExpanded ? "Clique para recolher a aba Editor" : "Clique para expandir a aba Editor"}
+      >
+        <span>✎ Editor</span>
+        <span
+          style={{
+            fontSize: 9,
+            color: isEditorActive ? colors.accent : colors.dim,
+          }}
+        >
+          {editorExpanded ? "▾" : "▸"}
+        </span>
       </div>
       {tabs.map((t) => (
         <div
