@@ -27,7 +27,12 @@ export default function App() {
   const s = useSessions();
   const u = useUpdate();
   const [editing, setEditing] = useState<Editing>({ kind: "connection", node: null, parentId: null });
-  const [active, setActive] = useState<string>("editor");
+  const [editorExpanded, setEditorExpanded] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    const saved = localStorage.getItem("remota:sidebarCollapsed");
+    return saved === "true";
+  });
+  const [active, setActive] = useState<string>("");
   const [notice, setNotice] = useState<string | null>(null);
   // Connect-time password prompt (connections with always_prompt). Resolves with the typed
   // password, or null if cancelled. The value is handed straight to the session, never stored.
@@ -35,6 +40,14 @@ export default function App() {
   const promptPassword = (name: string) => new Promise<string | null>((resolve) => setPwPrompt({ name, resolve }));
   const [setPwModal, setSetPwModal] = useState<{ title: string; resolve: (pw: string | null) => void } | null>(null);
   const promptNewPassword = (title: string) => new Promise<string | null>((resolve) => setSetPwModal({ title, resolve }));
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("remota:sidebarCollapsed", String(next));
+      return next;
+    });
+  };
 
   // Built once and rendered in every branch below — including the locked screen. Whoever has not
   // opened Remota in a month is exactly the person who has not heard about the release that fixed
@@ -66,14 +79,17 @@ export default function App() {
 
   function selectNode(n: Node) {
     setEditing({ kind: n.type === "folder" ? "folder" : "connection", node: n, parentId: findParentId(v.tree, n.id) });
+    setEditorExpanded(true);
     setActive("editor");
   }
   function newConnectionAt(parentId: string | null) {
     setEditing({ kind: "connection", node: null, parentId });
+    setEditorExpanded(true);
     setActive("editor");
   }
   function newFolderAt(parentId: string | null) {
     setEditing({ kind: "folder", node: null, parentId });
+    setEditorExpanded(true);
     setActive("editor");
   }
   const newConnection = () => newConnectionAt(targetParent);
@@ -81,7 +97,26 @@ export default function App() {
   function lock() {
     v.lock();
     setEditing({ kind: "connection", node: null, parentId: null });
-    setActive("editor");
+    setEditorExpanded(false);
+    setActive("");
+  }
+
+  function handleToggleEditor() {
+    if (editorExpanded) {
+      if (active === "editor") {
+        setEditorExpanded(false);
+        if (s.tabs.length > 0) {
+          setActive(s.tabs[s.tabs.length - 1].id);
+        } else {
+          setActive("");
+        }
+      } else {
+        setActive("editor");
+      }
+    } else {
+      setEditorExpanded(true);
+      setActive("editor");
+    }
   }
 
   async function saveNode(n: Node) {
@@ -109,7 +144,7 @@ export default function App() {
     }
     const newId = await s.openSession({
       connId: id,
-      title: found.node.name,
+      title: found.node.name.trim(),
       protocol: found.node.conn.protocol,
       host: found.node.conn.host,
       port: found.node.conn.port,
@@ -124,7 +159,12 @@ export default function App() {
   }
   function closeTab(id: string) {
     s.closeSession(id);
-    setActive((cur) => (cur === id ? "editor" : cur));
+    setActive((cur) => {
+      if (cur !== id) return cur;
+      const remaining = s.tabs.filter((t) => t.id !== id);
+      if (remaining.length > 0) return remaining[remaining.length - 1].id;
+      return editorExpanded ? "editor" : "";
+    });
   }
 
   // Arrastar um nó para dentro de uma pasta (ou raiz). O backend (upsert) trata do mover.
@@ -214,7 +254,7 @@ export default function App() {
 
   async function deleteNode(id: string) {
     const node = findNode(v.tree, id);
-    const name = node?.name ?? "este item";
+    const name = node?.name?.trim() ?? "este item";
     const isFolder = node?.type === "folder";
     const msg = isFolder
       ? `Move the folder "${name}" and its contents to the Trash?`
@@ -240,6 +280,9 @@ export default function App() {
       items: [
         { label: "New connection", onClick: newConnection },
         { label: "New folder", onClick: newFolder },
+        "sep",
+        { label: sidebarCollapsed ? "Show Connections Sidebar" : "Collapse Connections Sidebar", onClick: toggleSidebar },
+        { label: editorExpanded ? "Collapse Editor" : "Expand Editor", onClick: handleToggleEditor },
         "sep",
         { label: "Import from mRemoteNG (confCons.xml)…", onClick: importMremoteng },
         { label: "Import connections (Remota)…", onClick: importRemotaJson },
@@ -286,8 +329,26 @@ export default function App() {
       <div style={toolbar}>
         <strong style={{ fontSize: 14, letterSpacing: 0.3 }}>Remota</strong>
         <div style={{ width: 1, height: 18, background: colors.border, margin: "0 6px" }} />
+        <button
+          style={{
+            ...toolBtn,
+            color: !sidebarCollapsed ? colors.accent : colors.dim,
+            borderColor: !sidebarCollapsed ? colors.accent : colors.border,
+          }}
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? "Expandir menu Connections" : "Recolher menu Connections"}
+        >
+          {!sidebarCollapsed ? "◧ Connections ▾" : "◧ Connections ▸"}
+        </button>
         <button style={toolBtn} onClick={newConnection}>+ Connection</button>
         <button style={toolBtn} onClick={newFolder}>+ Folder</button>
+        <button
+          style={{ ...toolBtn, color: editorExpanded ? colors.accent : colors.dim, borderColor: editorExpanded ? colors.accent : colors.border }}
+          onClick={handleToggleEditor}
+          title={editorExpanded ? "Recolher aba Editor" : "Expandir aba Editor"}
+        >
+          {editorExpanded ? "✎ Editor ▾" : "✎ Editor ▸"}
+        </button>
         <button style={toolBtn} onClick={lock}>Lock</button>
       </div>
 
@@ -299,35 +360,141 @@ export default function App() {
       )}
 
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        <aside style={sidebar}>
-          <div style={sidebarHead}>Connections</div>
-          <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-            <ConnectionTree
-              doc={v.tree}
-              selectedId={selected?.id ?? null}
-              onSelect={selectNode}
-              onOpen={(n) => { if (n.type === "connection") openConn(n.id); }}
-              onOpenNew={(n) => { if (n.type === "connection") openConn(n.id, true); }}
-              onDelete={deleteNode}
-              onNewConnection={newConnectionAt}
-              onNewFolder={newFolderAt}
-              onMove={moveNode}
-            />
-          </div>
-          <TrashPanel trash={v.tree.trash ?? []} onRestore={v.restore} onDeleteForever={deleteForever} onEmpty={emptyTrash} />
+        <aside
+          style={{
+            ...sidebar,
+            width: sidebarCollapsed ? 36 : 320,
+            background: sidebarCollapsed ? "#12141a" : "transparent",
+            cursor: sidebarCollapsed ? "pointer" : "default",
+            userSelect: sidebarCollapsed ? "none" : "auto",
+          }}
+          onClick={sidebarCollapsed ? toggleSidebar : undefined}
+          title={sidebarCollapsed ? "Clique para expandir o menu Connections" : undefined}
+        >
+          {sidebarCollapsed ? (
+            <>
+              <div
+                style={{
+                  height: 32,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderBottom: `1px solid ${colors.border}`,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSidebar();
+                  }}
+                  style={iconBtn}
+                  title="Expandir menu Connections"
+                >
+                  ▸
+                </button>
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  paddingTop: 16,
+                  gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 13, opacity: 0.7 }}>🗂</span>
+                <span
+                  style={{
+                    writingMode: "vertical-rl",
+                    transform: "rotate(180deg)",
+                    fontSize: 10,
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                    color: colors.dim,
+                    fontWeight: 600,
+                  }}
+                >
+                  Connections
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  ...sidebarHead,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span>Connections</span>
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  style={iconBtn}
+                  title="Recolher menu Connections"
+                >
+                  ◂
+                </button>
+              </div>
+              <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+                <ConnectionTree
+                  doc={v.tree}
+                  selectedId={selected?.id ?? null}
+                  onSelect={selectNode}
+                  onOpen={(n) => {
+                    if (n.type === "connection") openConn(n.id);
+                  }}
+                  onOpenNew={(n) => {
+                    if (n.type === "connection") openConn(n.id, true);
+                  }}
+                  onDelete={deleteNode}
+                  onNewConnection={newConnectionAt}
+                  onNewFolder={newFolderAt}
+                  onMove={moveNode}
+                />
+              </div>
+              <TrashPanel
+                trash={v.tree.trash ?? []}
+                onRestore={v.restore}
+                onDeleteForever={deleteForever}
+                onEmpty={emptyTrash}
+              />
+            </>
+          )}
         </aside>
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <TabBar
             tabs={s.tabs}
             activeId={active}
-            onActivate={setActive}
+            editorExpanded={editorExpanded}
+            onToggleEditor={handleToggleEditor}
+            onActivate={(id) => {
+              if (id === "editor") {
+                setEditorExpanded(true);
+              }
+              setActive(id);
+            }}
             onClose={closeTab}
             onReconnect={s.reconnect}
             onDuplicate={async (id) => { const nid = await s.duplicate(id); if (nid) setActive(nid); }}
           />
           <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-            <div style={{ ...pane, overflow: "auto", display: active === "editor" ? "block" : "none" }}>
+            <div style={{ ...pane, overflow: "auto", display: active === "editor" && editorExpanded ? "block" : "none" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", padding: "10px 16px 0", maxWidth: 420 }}>
+                <button
+                  type="button"
+                  onClick={handleToggleEditor}
+                  style={{ ...toolBtn, fontSize: 11, padding: "2px 8px", display: "flex", alignItems: "center", gap: 4 }}
+                  title="Recolher aba Editor"
+                >
+                  <span>▴ Recolher Editor</span>
+                </button>
+              </div>
               {editing.kind === "folder" ? (
                 <FolderEditor node={editing.node} onSave={saveNode} />
               ) : (
@@ -339,6 +506,43 @@ export default function App() {
                 <SessionView tab={t} onDead={() => s.markDead(t.id)} />
               </div>
             ))}
+            {(!editorExpanded || active !== "editor") && !s.tabs.some((t) => t.id === active) && (
+              <div
+                style={{
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 12,
+                  color: colors.dim,
+                  padding: 24,
+                  userSelect: "none",
+                }}
+              >
+                <div style={{ fontSize: 36, opacity: 0.4 }}>🖥️</div>
+                <div style={{ fontSize: 15, fontWeight: 500, color: colors.text }}>Nenhuma sessão aberta</div>
+                <div style={{ fontSize: 13, maxWidth: 380, textAlign: "center", lineHeight: 1.5 }}>
+                  Dê um duplo clique em uma conexão na barra lateral para conectar, ou expanda a aba Editor para gerenciar conexões.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditorExpanded(true);
+                    setActive("editor");
+                  }}
+                  style={{
+                    ...toolBtn,
+                    borderColor: colors.accent,
+                    color: colors.text,
+                    padding: "6px 14px",
+                    marginTop: 4,
+                  }}
+                >
+                  ✎ Expandir Editor
+                </button>
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -416,7 +620,27 @@ const banner: CSSProperties = {
   borderBottom: `1px solid ${colors.border}`,
   color: colors.text,
 };
-const sidebar: CSSProperties = { width: 320, borderRight: `1px solid ${colors.border}`, overflow: "hidden", display: "flex", flexDirection: "column" };
+const sidebar: CSSProperties = {
+  borderRight: `1px solid ${colors.border}`,
+  overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
+  transition: "width 0.15s ease",
+  flexShrink: 0,
+};
+const iconBtn: CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: colors.dim,
+  cursor: "pointer",
+  padding: "2px 6px",
+  borderRadius: 4,
+  fontSize: 12,
+  lineHeight: 1,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
 const sidebarHead: CSSProperties = {
   padding: "8px 12px",
   fontSize: 11,
