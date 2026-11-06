@@ -68,9 +68,20 @@ impl VaultManager {
     pub fn upsert(&self, parent_id: Option<&str>, node: Node) -> Result<(), VaultError> {
         let mut guard = self.inner.lock().unwrap();
         let u = guard.as_mut().ok_or(VaultError::Locked)?;
-        // remove qualquer nó com o mesmo id (upsert), depois insere
-        u.doc.remove(node_id(&node));
-        insert_into(&mut u.doc.nodes, parent_id, node)?;
+        let id = node_id(&node);
+        let existing_parent = find_parent_id(&u.doc.nodes, id);
+        let same_parent = match (existing_parent, parent_id) {
+            (Some(None), None) => true,
+            (Some(Some(ref ep)), Some(np)) => ep == np,
+            _ => false,
+        };
+
+        if same_parent && replace_in(&mut u.doc.nodes, parent_id, &node) {
+            // substituído na mesma posição original
+        } else {
+            u.doc.remove(id);
+            insert_into(&mut u.doc.nodes, parent_id, node)?;
+        }
         let password = u.password.clone();
         let doc = u.doc.clone();
         drop(guard);
@@ -179,6 +190,53 @@ fn insert_into(
     }
 }
 
+fn find_parent_id(nodes: &[Node], id: &str) -> Option<Option<String>> {
+    fn walk(nodes: &[Node], id: &str, current_parent: Option<&str>) -> Option<Option<String>> {
+        for n in nodes {
+            if node_id(n) == id {
+                return Some(current_parent.map(|s| s.to_string()));
+            }
+            if let Node::Folder { id: fid, children, .. } = n {
+                if let Some(res) = walk(children, id, Some(fid)) {
+                    return Some(res);
+                }
+            }
+        }
+        None
+    }
+    walk(nodes, id, None)
+}
+
+fn replace_in(nodes: &mut Vec<Node>, parent_id: Option<&str>, node: &Node) -> bool {
+    let target_id = node_id(node);
+    match parent_id {
+        None => {
+            if let Some(pos) = nodes.iter().position(|n| node_id(n) == target_id) {
+                nodes[pos] = node.clone();
+                return true;
+            }
+            false
+        }
+        Some(pid) => {
+            for n in nodes.iter_mut() {
+                if let Node::Folder { id, children, .. } = n {
+                    if id == pid {
+                        if let Some(pos) = children.iter().position(|c| node_id(c) == target_id) {
+                            children[pos] = node.clone();
+                            return true;
+                        }
+                        return false;
+                    }
+                    if replace_in(children, Some(pid), node) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,6 +285,21 @@ mod tests {
         let mgr2 = VaultManager::new(path);
         mgr2.unlock("mestra").unwrap();
         assert!(mgr2.tree().unwrap().find("c1").is_some());
+    }
+
+    #[test]
+    fn upsert_existing_preserves_position() {
+        let mgr = VaultManager::new(tmp("position"));
+        mgr.unlock("mestra").unwrap();
+        mgr.upsert(None, conn_node("c1", "10.0.0.1")).unwrap();
+        mgr.upsert(None, conn_node("c2", "10.0.0.2")).unwrap();
+        mgr.upsert(None, conn_node("c3", "10.0.0.3")).unwrap();
+        // Atualiza c1 sem alterar o pai
+        mgr.upsert(None, conn_node("c1", "10.0.0.99")).unwrap();
+        let tree = mgr.tree().unwrap();
+        assert_eq!(node_id(&tree.nodes[0]), "c1");
+        assert_eq!(node_id(&tree.nodes[1]), "c2");
+        assert_eq!(node_id(&tree.nodes[2]), "c3");
     }
 
     #[test]
