@@ -56,10 +56,10 @@ export function ConnectionEditor({ node, onSave, onConnect }: Props) {
       const built: Node = {
         type: "connection",
         id: editingId ?? crypto.randomUUID(),
-        name,
+        name: name.trim(),
         conn: {
           protocol,
-          host,
+          host: host.trim(),
           port: port ? Number(port) : undefined,
           credentials: {
             username: username || undefined,

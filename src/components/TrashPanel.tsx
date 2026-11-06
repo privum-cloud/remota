@@ -30,7 +30,7 @@ export function TrashPanel({ trash, onRestore, onDeleteForever, onEmpty }: Props
           {trash.map((e) => (
             <div key={e.node.id} className="tree-row" style={row}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                {e.node.type === "folder" ? (e.node.icon ?? "📁") : "🔌"} {e.node.name}
+                {e.node.type === "folder" ? (e.node.icon || "📁") : "🔌"} {e.node.name.trim()}
               </span>
               <button type="button" onClick={() => onRestore(e.node.id)} style={iconBtn} title="Restore">↩</button>
               <button type="button" onClick={() => onDeleteForever(e.node.id)} style={{ ...iconBtn, fontSize: 15 }} title="Delete forever">×</button>
