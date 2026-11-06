@@ -45,4 +45,6 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 webpki-roots = "0.26"
 # RDP: RDCleanPath PDU (same crate family as the ironrdp-web client) for the /rdp proxy.
 ironrdp-rdcleanpath = "0.2"
+openssl = "0.10"
+tokio-openssl = "0.6"
 
