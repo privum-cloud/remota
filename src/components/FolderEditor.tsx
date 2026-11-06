@@ -54,7 +54,7 @@ export function FolderEditor({ node, onSave }: { node: Node | null; onSave: (n: 
       const built: Node = {
         type: "folder",
         id: editingId ?? crypto.randomUUID(),
-        name,
+        name: name.trim(),
         defaults: {
           username: username || undefined,
           password: password || undefined,
